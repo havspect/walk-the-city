@@ -37,8 +37,17 @@ func (v *ValidationError) Error() string {
 // CreateTripParams holds inputs for creating a new city trip.
 type CreateTripParams struct {
 	Destination  string
+	City         string
+	Country      string
+	Lat          float64
+	Lon          float64
+	Month        string
 	DurationDays int
+	Pace         string
+	Interests    []string
+	Mobility     string
 	Notes        string
+	Itinerary    *Itinerary
 }
 
 // Validate verifies that the trip input parameters satisfy business constraints.
@@ -68,12 +77,11 @@ func (p CreateTripParams) Validate() *ValidationError {
 }
 
 // TripService defines the business operations for city trip management.
-// This interface acts as the decoupled integration seam for HTTP handlers
-// and future LLM itinerary generation agents.
 type TripService interface {
 	CreateTrip(ctx context.Context, params CreateTripParams) (*Trip, error)
 	ListTrips(ctx context.Context) ([]Trip, error)
 	GetTripByID(ctx context.Context, id uint) (*Trip, error)
+	GenerateAndSaveTrip(ctx context.Context, params CreateTripParams, gen TripGenerator) (*Trip, error)
 }
 
 type service struct {
@@ -90,10 +98,32 @@ func (s *service) CreateTrip(ctx context.Context, params CreateTripParams) (*Tri
 		return nil, validationErr
 	}
 
+	cityName := strings.TrimSpace(params.City)
+	if cityName == "" {
+		parts := strings.Split(params.Destination, ",")
+		cityName = strings.TrimSpace(parts[0])
+	}
+
+	interestsStr := strings.Join(params.Interests, ", ")
+
 	t := &Trip{
 		Destination:  strings.TrimSpace(params.Destination),
+		City:         cityName,
+		Country:      strings.TrimSpace(params.Country),
+		Lat:          params.Lat,
+		Lon:          params.Lon,
+		Month:        strings.TrimSpace(params.Month),
 		DurationDays: params.DurationDays,
+		Pace:         strings.TrimSpace(params.Pace),
+		Interests:    interestsStr,
+		Mobility:     strings.TrimSpace(params.Mobility),
 		Notes:        strings.TrimSpace(params.Notes),
+	}
+
+	if params.Itinerary != nil {
+		if err := t.SetItinerary(params.Itinerary); err != nil {
+			return nil, fmt.Errorf("failed to encode itinerary: %w", err)
+		}
 	}
 
 	if err := s.db.WithContext(ctx).Create(t).Error; err != nil {
@@ -122,4 +152,20 @@ func (s *service) GetTripByID(ctx context.Context, id uint) (*Trip, error) {
 		return nil, fmt.Errorf("failed to get trip %d: %w", id, err)
 	}
 	return &t, nil
+}
+
+func (s *service) GenerateAndSaveTrip(ctx context.Context, params CreateTripParams, gen TripGenerator) (*Trip, error) {
+	if validationErr := params.Validate(); validationErr != nil {
+		return nil, validationErr
+	}
+
+	if gen != nil {
+		it, err := gen.Generate(ctx, params)
+		if err != nil {
+			return nil, fmt.Errorf("itinerary generation failed: %w", err)
+		}
+		params.Itinerary = it
+	}
+
+	return s.CreateTrip(ctx, params)
 }
