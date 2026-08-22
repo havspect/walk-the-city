@@ -55,15 +55,21 @@ func newHTMLRenderer(templateFS fs.FS, sharedTemplateFiles ...string) (*htmlRend
 			return template.URL(fmt.Sprintf("https://en.wikipedia.org/wiki/Special:Search?search=%s", url.QueryEscape(q)))
 		},
 		"categoryBadgeClass": func(category string) string {
-			switch strings.ToLower(category) {
-			case "architecture":
+			switch strings.ToLower(strings.ReplaceAll(category, "_", "")) {
+			case "landmark", "architecture":
 				return "badge-architecture"
 			case "history":
 				return "badge-history"
-			case "food & living", "food", "dining":
+			case "fooddrink", "food & living", "food", "dining", "foodanddrink":
 				return "badge-food"
-			case "hidden gem", "culture":
+			case "hiddengem", "hidden gem", "culture":
 				return "badge-gem"
+			case "parknature", "park & nature", "nature", "park":
+				return "badge-nature"
+			case "neighborhood":
+				return "badge-neighborhood"
+			case "trivia", "cool fact":
+				return "badge-trivia"
 			case "transit", "walk":
 				return "badge-transit"
 			default:
@@ -71,17 +77,29 @@ func newHTMLRenderer(templateFS fs.FS, sharedTemplateFiles ...string) (*htmlRend
 			}
 		},
 		"categoryIcon": func(category string) string {
-			switch strings.ToLower(category) {
-			case "architecture":
+			switch strings.ToLower(strings.ReplaceAll(category, "_", "")) {
+			case "landmark", "architecture":
 				return "🏛️"
 			case "history":
 				return "📜"
-			case "food & living", "food", "dining":
+			case "fooddrink", "food & living", "food", "dining", "foodanddrink":
 				return "🍝"
-			case "hidden gem", "culture":
+			case "hiddengem", "hidden gem", "culture":
 				return "💎"
-			case "transit", "walk":
+			case "parknature", "park & nature", "nature", "park":
+				return "🌳"
+			case "neighborhood":
+				return "🏘️"
+			case "trivia", "cool fact":
+				return "💡"
+			case "transit":
+				return "🚌"
+			case "walk":
 				return "🚶"
+			case "bicycle":
+				return "🚲"
+			case "drive":
+				return "🚗"
 			default:
 				return "📍"
 			}
@@ -90,8 +108,42 @@ func newHTMLRenderer(templateFS fs.FS, sharedTemplateFiles ...string) (*htmlRend
 			if t == nil {
 				return false
 			}
-			it, err := t.GetItinerary()
-			return err == nil && it != nil && len(it.Days) > 0
+			return len(t.Itineraries) > 0
+		},
+		"hasItineraries": func(t *trip.Trip) bool {
+			if t == nil {
+				return false
+			}
+			return len(t.Itineraries) > 0
+		},
+		"formatDistance": func(meters int) string {
+			if meters >= 1000 {
+				return fmt.Sprintf("%.1f km", float64(meters)/1000)
+			}
+			return fmt.Sprintf("%d m", meters)
+		},
+		"modeIcon": func(mode string) string {
+			switch strings.ToLower(mode) {
+			case "walk":
+				return "🚶"
+			case "transit":
+				return "🚌"
+			case "bicycle":
+				return "🚲"
+			case "drive":
+				return "🚗"
+			default:
+				return "➡️"
+			}
+		},
+		"segmentLabel": func(s trip.Segment) string {
+			var dist string
+			if s.DistanceMeters >= 1000 {
+				dist = fmt.Sprintf("%.1f km", float64(s.DistanceMeters)/1000)
+			} else {
+				dist = fmt.Sprintf("%d m", s.DistanceMeters)
+			}
+			return fmt.Sprintf("%s · %s · %d min", s.Mode, dist, s.DurationMinutes)
 		},
 	}
 

@@ -1,0 +1,21 @@
+{{define "itinerary_section"}}
+<section class="itinerary-section" style="margin-bottom: 3rem; border: 1px solid var(--pico-muted-border-color); border-radius: 12px; padding: 1.5rem; background: var(--pico-card-background-color);">
+    <header class="itinerary-header" style="margin-bottom: 1.25rem; border-bottom: 1px solid var(--pico-muted-border-color); padding-bottom: 0.75rem;">
+        <h3 style="margin-bottom: 0.25rem;">{{.Title}}</h3>
+        {{if .Theme}}<p class="muted" style="margin-bottom: 0.25rem;"><em>{{.Theme}}</em></p>{{end}}
+        {{if .Summary}}<p style="font-size: 0.95rem; line-height: 1.5; margin-bottom: 0.35rem;">{{.Summary}}</p>{{end}}
+        {{if .BestSeason}}<p style="color: var(--pico-muted-color); font-size: 0.85rem; margin-bottom: 0;">🌤️ <strong>Seasonal Insight:</strong> {{.BestSeason}}</p>{{end}}
+    </header>
+
+    {{if .Stops}}
+        <div class="itinerary-stops">
+            {{range $i, $stop := .Stops}}
+                {{template "stop_card" $stop}}
+                {{if lt $i (len $.Segments)}}{{with index $.Segments $i}}{{template "segment_chip" .}}{{end}}{{end}}
+            {{end}}
+        </div>
+    {{else}}
+        <p class="muted">No stops in this itinerary yet.</p>
+    {{end}}
+</section>
+{{end}}

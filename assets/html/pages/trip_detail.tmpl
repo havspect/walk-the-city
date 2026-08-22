@@ -18,17 +18,6 @@
         </div>
     </div>
 
-    {{if .Itinerary}}
-        <p style="font-size: 1.05rem; line-height: 1.6; margin-top: 1rem; margin-bottom: 0.75rem;">
-            {{.Itinerary.Summary}}
-        </p>
-        {{if .Itinerary.BestSeason}}
-            <p style="color: var(--pico-muted-color); font-size: 0.9rem; margin-bottom: 1rem;">
-                🌤️ <strong>Seasonal Insight:</strong> {{.Itinerary.BestSeason}}
-            </p>
-        {{end}}
-    {{end}}
-
     <div class="trip-meta-pills">
         {{if .Trip.Month}}<span class="meta-pill">📅 <strong>Month:</strong> {{.Trip.Month}}</span>{{end}}
         <span class="meta-pill">⏱️ <strong>Duration:</strong> {{.Trip.DurationDays}} {{if eq .Trip.DurationDays 1}}Day{{else}}Days{{end}}</span>
@@ -38,55 +27,19 @@
     </div>
 </section>
 
-{{if .Itinerary}}
-    {{if .Itinerary.Days}}
-        <section style="margin-bottom: 3.5rem;">
-            <h2 style="margin-bottom: 1.5rem; border-bottom: 2px solid var(--pico-muted-border-color); padding-bottom: 0.5rem;">
-                🗺️ Daily Itinerary & Walking Routes
-            </h2>
-            {{range .Itinerary.Days}}
-                {{template "daily_route" .}}
-            {{end}}
-        </section>
-    {{end}}
-
-    {{if .Itinerary.HighlightCards}}
-        <section style="margin-bottom: 3.5rem;">
-            <h2 style="margin-bottom: 1.5rem; border-bottom: 2px solid var(--pico-muted-border-color); padding-bottom: 0.5rem;">
-                🏛️ Cultural Highlights & Neighborhood Stories
-            </h2>
-            <div class="cards-grid">
-                {{range .Itinerary.HighlightCards}}
-                    {{template "trip_card" .}}
-                {{end}}
-            </div>
-        </section>
-    {{end}}
-
-    {{if .Itinerary.CoolFacts}}
-        <section style="margin-bottom: 3rem;">
-            <h2 style="margin-bottom: 1.5rem; border-bottom: 2px solid var(--pico-muted-border-color); padding-bottom: 0.5rem;">
-                💡 Cool to Know & Local Quirk Guide
-            </h2>
-            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
-                {{range .Itinerary.CoolFacts}}
-                    <div class="cool-fact-card">
-                        <h4 style="margin-bottom: 0.5rem; color: #1e3a8a; font-size: 1.05rem;">💡 {{.Title}}</h4>
-                        <p style="font-size: 0.9rem; line-height: 1.5; margin-bottom: 0.5rem; color: #1e293b;">{{.Fact}}</p>
-                        {{if .SeasonalityNote}}
-                            <small style="color: #64748b; display: block; border-top: 1px dashed #cbd5e1; padding-top: 0.35rem; margin-top: 0.35rem;">
-                                🍂 {{.SeasonalityNote}}
-                            </small>
-                        {{end}}
-                    </div>
-                {{end}}
-            </div>
-        </section>
-    {{end}}
+{{if hasItineraries .Trip}}
+    <section style="margin-bottom: 1rem;">
+        <h2 style="margin-bottom: 1rem; border-bottom: 2px solid var(--pico-muted-border-color); padding-bottom: 0.5rem;">
+            🗺️ Your Itineraries — {{len .Trip.Itineraries}} alternative plan{{if gt (len .Trip.Itineraries) 1}}s{{end}}
+        </h2>
+        {{range .Trip.Itineraries}}
+            {{template "itinerary_section" .}}
+        {{end}}
+    </section>
 {{else}}
     <article style="text-align: center; padding: 2rem;">
         <h3>Trip Overview</h3>
-        <p>{{if .Trip.Notes}}{{.Trip.Notes}}{{else}}No notes recorded for this destination.{{end}}</p>
+        <p>{{if .Trip.Notes}}{{.Trip.Notes}}{{else}}No itinerary generated yet — try generating a trip with the wizard.{{end}}</p>
     </article>
 {{end}}
 {{end}}

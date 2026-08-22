@@ -43,7 +43,7 @@ func OpenDSN(dsn string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	if err := db.AutoMigrate(&trip.Trip{}); err != nil {
+	if err := db.AutoMigrate(&trip.Trip{}, &trip.Itinerary{}, &trip.Stop{}, &trip.Segment{}); err != nil {
 		return nil, fmt.Errorf("failed to auto-migrate database schema: %w", err)
 	}
 

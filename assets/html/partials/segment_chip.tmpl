@@ -1,0 +1,10 @@
+{{define "segment_chip"}}
+<div class="segment-chip" style="display:flex; align-items:center; gap:0.5rem; padding: 0.5rem 0.75rem; margin: 0.5rem 0; background: var(--pico-card-background-color, #f8fafc); border: 1px dashed var(--pico-muted-border-color); border-radius: 8px; font-size: 0.85rem;">
+    <span class="segment-mode">{{modeIcon .Mode}} {{.Mode}}</span>
+    <span class="dot-sep">·</span>
+    <span class="segment-distance">{{formatDistance .DistanceMeters}}</span>
+    <span class="dot-sep">·</span>
+    <span class="segment-duration">{{.DurationMinutes}} min</span>
+    {{if .Instruction}}<span class="dot-sep">·</span><span class="segment-instruction" style="color: var(--pico-muted-color);">{{.Instruction}}</span>{{end}}
+</div>
+{{end}}

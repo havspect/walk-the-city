@@ -38,8 +38,7 @@ type preferencesData struct {
 }
 
 type tripDetailData struct {
-	Trip      *trip.Trip
-	Itinerary *trip.Itinerary
+	Trip *trip.Trip
 }
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
@@ -227,14 +226,8 @@ func (app *application) showTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	it, err := t.GetItinerary()
-	if err != nil {
-		app.logger.Warn("failed to parse trip itinerary json", "trip_id", t.ID, "error", err)
-	}
-
 	data := tripDetailData{
-		Trip:      t,
-		Itinerary: it,
+		Trip: t,
 	}
 
 	if err := app.html.render(w, http.StatusOK, data, "base", "pages/trip_detail.tmpl"); err != nil {

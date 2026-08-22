@@ -1,154 +1,23 @@
 package trip
 
 import (
+	"fmt"
 	"testing"
+	"time"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
-
-func TestTrip_ItineraryJSONSerialization(t *testing.T) {
-	trip := &Trip{
-		Destination:  "Rome, Italy",
-		City:         "Rome",
-		Country:      "Italy",
-		Lat:          41.8933,
-		Lon:          12.4829,
-		Month:        "September",
-		DurationDays: 3,
-		Pace:         "Moderate",
-		Interests:    "Architecture, History, Local Food",
-		Mobility:     "Walking + Transit",
-	}
-
-	it := &Itinerary{
-		Summary:    "A historic exploration of Rome in mild September weather.",
-		BestSeason: "Autumn (September - October)",
-		Days: []DayPlan{
-			{
-				DayNumber: 1,
-				Theme:     "Ancient Foundations & Monti Living",
-				Morning: []Stop{
-					{
-						Name:           "Colosseum & Ludus Magnus",
-						Neighborhood:   "Celio",
-						Category:       "Architecture",
-						Description:    "Flavian amphitheater and adjacent gladiatorial training grounds.",
-						WalkingMinutes: 10,
-						TransitTip:     "Metro Line B to Colosseo station",
-						Lat:            41.8902,
-						Lon:            12.4922,
-						WikiQuery:      "Colosseum",
-					},
-				},
-				Afternoon: []Stop{
-					{
-						Name:           "Monti Historic Alleys & Gelaterie",
-						Neighborhood:   "Monti",
-						Category:       "Food & Living",
-						Description:    "Artisan workshops and traditional gelato on Via Urbana.",
-						WalkingMinutes: 8,
-						TransitTip:     "Short stroll from Piazza Venezia",
-						Lat:            41.8950,
-						Lon:            12.4920,
-						WikiQuery:      "Monti (rione of Rome)",
-					},
-				},
-				Evening: []Stop{
-					{
-						Name:           "Piazza Madonna dei Monti",
-						Neighborhood:   "Monti",
-						Category:       "Food & Living",
-						Description:    "Local piazza gathering with authentic aperitivo and supplì.",
-						WalkingMinutes: 5,
-						Lat:            41.8942,
-						Lon:            12.4905,
-						WikiQuery:      "Piazza della Madonna dei Monti",
-					},
-				},
-			},
-		},
-		HighlightCards: []HighlightCard{
-			{
-				Category:       "Architecture",
-				Title:          "Pantheon Concrete Dome",
-				Neighborhood:   "Pigna",
-				Story:          "Unreinforced concrete dome that has stood intact for almost 2,000 years.",
-				Tip:            "Visit at midday to see sunlight illuminate the interior oculus.",
-				WalkingMinutes: 12,
-				TransitTip:     "Bus 64 or 70 from Termini",
-				Lat:            41.8986,
-				Lon:            12.4769,
-				WikiQuery:      "Pantheon, Rome",
-			},
-			{
-				Category:       "Food & Living",
-				Title:          "Trastevere Backstreet Forno",
-				Neighborhood:   "Trastevere",
-				Story:          "Neighborhood bakery renowned for pizza al taglio and morning supplì.",
-				Tip:            "Arrive before 1 PM for the freshest pizza bianca.",
-				WalkingMinutes: 15,
-				TransitTip:     "Tram 8 to Piazza Sonnino",
-				Lat:            41.8885,
-				Lon:            12.4700,
-				WikiQuery:      "Trastevere",
-			},
-		},
-		CoolFacts: []CoolFactCard{
-			{
-				Title:           "Nasone Public Water Fountains",
-				Fact:            "Rome has over 2,500 continuous cold drinking water fountains nicknamed nasoni (big noses).",
-				SeasonalityNote: "Crisp, cold water is especially refreshing in early September.",
-			},
-		},
-	}
-
-	err := trip.SetItinerary(it)
-	if err != nil {
-		t.Fatalf("SetItinerary failed: %v", err)
-	}
-
-	if trip.ItineraryJSON == "" {
-		t.Fatal("expected non-empty ItineraryJSON")
-	}
-
-	loadedIt, err := trip.GetItinerary()
-	if err != nil {
-		t.Fatalf("GetItinerary failed: %v", err)
-	}
-
-	if loadedIt == nil {
-		t.Fatal("expected non-nil Itinerary")
-	}
-
-	if loadedIt.Summary != it.Summary {
-		t.Errorf("expected summary '%s', got '%s'", it.Summary, loadedIt.Summary)
-	}
-
-	if len(loadedIt.Days) != 1 {
-		t.Fatalf("expected 1 day plan, got %d", len(loadedIt.Days))
-	}
-
-	if len(loadedIt.HighlightCards) != 2 {
-		t.Fatalf("expected 2 highlight cards, got %d", len(loadedIt.HighlightCards))
-	}
-
-	if len(loadedIt.CoolFacts) != 1 {
-		t.Fatalf("expected 1 cool fact, got %d", len(loadedIt.CoolFacts))
-	}
-
-	if loadedIt.HighlightCards[0].Title != "Pantheon Concrete Dome" {
-		t.Errorf("expected card title 'Pantheon Concrete Dome', got '%s'", loadedIt.HighlightCards[0].Title)
-	}
-}
 
 func TestTrip_InterestsList(t *testing.T) {
 	trip := &Trip{
 		Interests: "Architecture, History, Local Food",
 	}
-
 	list := trip.InterestsList()
 	if len(list) != 3 {
 		t.Fatalf("expected 3 items in list, got %d", len(list))
 	}
-
 	expected := []string{"Architecture", "History", "Local Food"}
 	for i, exp := range expected {
 		if list[i] != exp {
@@ -157,13 +26,105 @@ func TestTrip_InterestsList(t *testing.T) {
 	}
 }
 
-func TestTrip_EmptyItineraryJSON(t *testing.T) {
-	trip := &Trip{}
-	it, err := trip.GetItinerary()
-	if err != nil {
-		t.Fatalf("unexpected error on empty itinerary json: %v", err)
+func TestTrip_EmptyInterestsList(t *testing.T) {
+	trip := &Trip{Interests: "   "}
+	if list := trip.InterestsList(); list != nil {
+		t.Errorf("expected nil for empty interests, got %v", list)
 	}
-	if it != nil {
-		t.Errorf("expected nil itinerary for empty JSON, got %+v", it)
+}
+
+func TestModel_NormalizedSchema_CreateAndPreload(t *testing.T) {
+	dsn := fmt.Sprintf("file:memmodel_%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&Trip{}, &Itinerary{}, &Stop{}, &Segment{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	trip := &Trip{Destination: "Rome, Italy", DurationDays: 3}
+	if err := db.Create(trip).Error; err != nil {
+		t.Fatalf("create trip: %v", err)
+	}
+
+	itin := &Itinerary{TripID: trip.ID, Title: "Classic Highlights", Theme: "Ancient", Summary: "summary", BestSeason: "Spring", Position: 0}
+	if err := db.Create(itin).Error; err != nil {
+		t.Fatalf("create itinerary: %v", err)
+	}
+
+	stops := []Stop{
+		{ItineraryID: itin.ID, Position: 0, Kind: StopKindLandmark, Title: "Colosseum", Body: "body", ImageURL: "https://example.com/a.jpg"},
+		{ItineraryID: itin.ID, Position: 1, Kind: StopKindHistory, Title: "Forum", Body: "body", ImageURL: "https://example.com/b.jpg"},
+		{ItineraryID: itin.ID, Position: 2, Kind: StopKindFoodDrink, Title: "Trattoria", Body: "body", Tip: "order cacio e pepe", ImageURL: "https://example.com/c.jpg"},
+	}
+	for i := range stops {
+		if err := db.Create(&stops[i]).Error; err != nil {
+			t.Fatalf("create stop %d: %v", i, err)
+		}
+	}
+
+	segment := Segment{ItineraryID: itin.ID, FromStopID: stops[0].ID, ToStopID: stops[1].ID, Position: 0, Mode: SegmentModeWalk, DistanceMeters: 500, DurationMinutes: 6, Instruction: "Walk"}
+	if err := db.Create(&segment).Error; err != nil {
+		t.Fatalf("create segment: %v", err)
+	}
+	segment2 := Segment{ItineraryID: itin.ID, FromStopID: stops[1].ID, ToStopID: stops[2].ID, Position: 1, Mode: SegmentModeTransit, DistanceMeters: 1200, DurationMinutes: 10, Instruction: "Transit"}
+	if err := db.Create(&segment2).Error; err != nil {
+		t.Fatalf("create segment2: %v", err)
+	}
+
+	var loaded Trip
+	if err := db.Preload("Itineraries", func(db *gorm.DB) *gorm.DB { return db.Order("position ASC") }).
+		Preload("Itineraries.Stops", func(db *gorm.DB) *gorm.DB { return db.Order("position ASC") }).
+		Preload("Itineraries.Segments", func(db *gorm.DB) *gorm.DB { return db.Order("position ASC") }).
+		First(&loaded, trip.ID).Error; err != nil {
+		t.Fatalf("preload: %v", err)
+	}
+
+	if len(loaded.Itineraries) != 1 {
+		t.Fatalf("expected 1 itinerary, got %d", len(loaded.Itineraries))
+	}
+	if len(loaded.Itineraries[0].Stops) != 3 {
+		t.Fatalf("expected 3 stops, got %d", len(loaded.Itineraries[0].Stops))
+	}
+	if len(loaded.Itineraries[0].Segments) != 2 {
+		t.Fatalf("expected 2 segments, got %d", len(loaded.Itineraries[0].Segments))
+	}
+	if loaded.Itineraries[0].Stops[0].Title != "Colosseum" {
+		t.Errorf("wrong first stop title %q", loaded.Itineraries[0].Stops[0].Title)
+	}
+	if loaded.Itineraries[0].Stops[2].Tip != "order cacio e pepe" {
+		t.Errorf("expected tip preserved")
+	}
+	// N-1 invariant
+	if len(loaded.Itineraries[0].Segments) != len(loaded.Itineraries[0].Stops)-1 {
+		t.Errorf("N-1 invariant broken")
+	}
+}
+
+func TestModel_CascadeDelete(t *testing.T) {
+	dsn := fmt.Sprintf("file:memcascade_%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	_ = db.Exec("PRAGMA foreign_keys=ON")
+	if err := db.AutoMigrate(&Trip{}, &Itinerary{}, &Stop{}, &Segment{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	trip := &Trip{Destination: "Test", DurationDays: 2}
+	db.Create(trip)
+	itin := &Itinerary{TripID: trip.ID, Title: "T", Position: 0}
+	db.Create(itin)
+	stop := Stop{ItineraryID: itin.ID, Position: 0, Kind: StopKindLandmark, Title: "S", Body: "b", ImageURL: "https://example.com/x.jpg"}
+	db.Create(&stop)
+
+	if err := db.Delete(trip).Error; err != nil {
+		t.Fatalf("delete trip: %v", err)
+	}
+	var count int64
+	db.Model(&Itinerary{}).Where("trip_id = ?", trip.ID).Count(&count)
+	if count != 0 {
+		t.Errorf("expected itineraries cascaded, got %d", count)
 	}
 }

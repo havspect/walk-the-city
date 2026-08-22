@@ -1,106 +1,118 @@
 package trip
 
 import (
-	"encoding/json"
 	"strings"
 	"time"
 )
 
-// Trip represents a persistent city trip plan in the database.
+// StopKind discriminates the uniform highlight-card type.
+const (
+	StopKindLandmark    = "Landmark"
+	StopKindHistory     = "History"
+	StopKindFoodDrink   = "FoodDrink"
+	StopKindHiddenGem   = "HiddenGem"
+	StopKindParkNature  = "ParkNature"
+	StopKindNeighborhood = "Neighborhood"
+	StopKindTrivia      = "Trivia"
+)
+
+// ValidStopKinds is the closed set of Stop.kind values (R4).
+var ValidStopKinds = map[string]bool{
+	StopKindLandmark:     true,
+	StopKindHistory:      true,
+	StopKindFoodDrink:    true,
+	StopKindHiddenGem:    true,
+	StopKindParkNature:   true,
+	StopKindNeighborhood: true,
+	StopKindTrivia:       true,
+}
+
+// SegmentMode is the transport mode between two consecutive stops (R13).
+const (
+	SegmentModeWalk    = "walk"
+	SegmentModeTransit = "transit"
+	SegmentModeBicycle = "bicycle"
+	SegmentModeDrive   = "drive"
+)
+
+// ValidSegmentModes is the closed set of Segment mode values.
+var ValidSegmentModes = map[string]bool{
+	SegmentModeWalk:    true,
+	SegmentModeTransit: true,
+	SegmentModeBicycle: true,
+	SegmentModeDrive:   true,
+}
+
+// Trip is the base entity. It owns many alternative Itineraries (R1).
 type Trip struct {
-	ID            uint      `gorm:"primaryKey" json:"id"`
-	Destination   string    `gorm:"size:255;not null" json:"destination"`
-	City          string    `gorm:"size:255" json:"city"`
-	Country       string    `gorm:"size:255" json:"country"`
-	Lat           float64   `json:"lat"`
-	Lon           float64   `json:"lon"`
-	Month         string    `gorm:"size:50" json:"month"`
-	DurationDays  int       `gorm:"not null;default:1" json:"duration_days"`
-	Pace          string    `gorm:"size:50" json:"pace"`
-	Interests     string    `gorm:"type:text" json:"interests"`
-	Mobility      string    `gorm:"size:100" json:"mobility"`
-	Notes         string    `gorm:"type:text" json:"notes"`
-	ItineraryJSON string    `gorm:"type:text" json:"itinerary_json"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	Destination  string    `gorm:"size:255;not null" json:"destination"`
+	City         string    `gorm:"size:255" json:"city"`
+	Country      string    `gorm:"size:255" json:"country"`
+	Lat          float64   `json:"lat"`
+	Lon          float64   `json:"lon"`
+	Month        string    `gorm:"size:50" json:"month"`
+	DurationDays int       `gorm:"not null;default:1" json:"duration_days"`
+	Pace         string    `gorm:"size:50" json:"pace"`
+	Interests    string    `gorm:"type:text" json:"interests"`
+	Mobility     string    `gorm:"size:100" json:"mobility"`
+	Notes        string    `gorm:"type:text" json:"notes"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+
+	Itineraries []Itinerary `gorm:"foreignKey:TripID;constraint:OnDelete:CASCADE" json:"itineraries"`
 }
 
-// Itinerary encapsulates the structured schedule, highlight cards, and trivia facts.
+// Itinerary is a themed / alternative plan for a Trip (R2). Not tied to a calendar day.
 type Itinerary struct {
-	Summary        string          `json:"summary"`
-	BestSeason     string          `json:"best_season"`
-	Days           []DayPlan       `json:"days"`
-	HighlightCards []HighlightCard `json:"highlight_cards"`
-	CoolFacts      []CoolFactCard  `json:"cool_facts"`
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	TripID     uint      `gorm:"not null;index;constraint:OnDelete:CASCADE" json:"trip_id"`
+	Title      string    `gorm:"size:255" json:"title"`
+	Theme      string    `gorm:"size:255" json:"theme"`
+	Summary    string    `gorm:"type:text" json:"summary"`
+	BestSeason string    `gorm:"type:text" json:"best_season"`
+	Position   int       `gorm:"not null;default:0" json:"position"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+
+	Stops    []Stop    `gorm:"foreignKey:ItineraryID;constraint:OnDelete:CASCADE" json:"stops"`
+	Segments []Segment `gorm:"foreignKey:ItineraryID;constraint:OnDelete:CASCADE" json:"segments"`
 }
 
-// DayPlan represents a daily schedule broken into Morning, Afternoon, and Evening stops.
-type DayPlan struct {
-	DayNumber int    `json:"day_number"`
-	Theme     string `json:"theme"`
-	Morning   []Stop `json:"morning"`
-	Afternoon []Stop `json:"afternoon"`
-	Evening   []Stop `json:"evening"`
-}
-
-// Stop represents an individual stop or waypoint within a daily itinerary.
+// Stop is a uniform highlight card within an Itinerary (R4-R8). Every Stop has image+text (R6).
 type Stop struct {
-	Name           string  `json:"name"`
-	Neighborhood   string  `json:"neighborhood"`
-	Category       string  `json:"category"`
-	Description    string  `json:"description"`
-	WalkingMinutes int     `json:"walking_minutes"`
-	TransitTip     string  `json:"transit_tip"`
-	Lat            float64 `json:"lat"`
-	Lon            float64 `json:"lon"`
-	WikiQuery      string  `json:"wiki_query"`
+	ID                 uint    `gorm:"primaryKey" json:"id"`
+	ItineraryID        uint    `gorm:"not null;index;constraint:OnDelete:CASCADE" json:"itinerary_id"`
+	Position           int     `gorm:"not null" json:"position"`
+	Kind               string  `gorm:"size:50;not null" json:"kind"`
+	Title              string  `gorm:"size:255;not null" json:"title"`
+	Body               string  `gorm:"type:text;not null" json:"body"`
+	Neighborhood       string  `gorm:"size:255" json:"neighborhood"`
+	Lat                float64 `json:"lat"`
+	Lon                float64 `json:"lon"`
+	WikiQuery          string  `gorm:"size:255" json:"wiki_query"`
+	RecommendedMinutes int     `json:"recommended_minutes"`
+	Tip                string  `gorm:"type:text" json:"tip"`
+
+	// Image fields — never empty url (R19). Placeholder at creation, upgraded in place (R17-R19).
+	ImageURL    string `gorm:"size:1024;not null" json:"image_url"`
+	ImageAlt    string `gorm:"size:255" json:"image_alt"`
+	ImageCredit string `gorm:"size:255" json:"image_credit"`
+	ImageSource string `gorm:"size:50" json:"image_source"`
+	ImagePrompt string `gorm:"type:text" json:"image_prompt"`
 }
 
-// HighlightCard represents a standalone visual card highlighting architecture, history, or local food.
-type HighlightCard struct {
-	Category       string  `json:"category"`
-	Title          string  `json:"title"`
-	Neighborhood   string  `json:"neighborhood"`
-	Story          string  `json:"story"`
-	Tip            string  `json:"tip"`
-	WalkingMinutes int     `json:"walking_minutes"`
-	TransitTip     string  `json:"transit_tip"`
-	Lat            float64 `json:"lat"`
-	Lon            float64 `json:"lon"`
-	WikiQuery      string  `json:"wiki_query"`
-}
-
-// CoolFactCard represents a trivia, cultural quirk, or seasonal recommendation.
-type CoolFactCard struct {
-	Title           string `json:"title"`
-	Fact            string `json:"fact"`
-	SeasonalityNote string `json:"seasonality_note"`
-}
-
-// GetItinerary deserializes the stored ItineraryJSON into an Itinerary struct.
-func (t *Trip) GetItinerary() (*Itinerary, error) {
-	if strings.TrimSpace(t.ItineraryJSON) == "" {
-		return nil, nil
-	}
-	var it Itinerary
-	if err := json.Unmarshal([]byte(t.ItineraryJSON), &it); err != nil {
-		return nil, err
-	}
-	return &it, nil
-}
-
-// SetItinerary serializes an Itinerary struct into the ItineraryJSON string field.
-func (t *Trip) SetItinerary(it *Itinerary) error {
-	if it == nil {
-		t.ItineraryJSON = ""
-		return nil
-	}
-	data, err := json.Marshal(it)
-	if err != nil {
-		return err
-	}
-	t.ItineraryJSON = string(data)
-	return nil
+// Segment connects two consecutive Stops within one Itinerary (R11-R13).
+type Segment struct {
+	ID              uint   `gorm:"primaryKey" json:"id"`
+	ItineraryID     uint   `gorm:"not null;index;constraint:OnDelete:CASCADE" json:"itinerary_id"`
+	FromStopID      uint   `gorm:"not null;index" json:"from_stop_id"`
+	ToStopID        uint   `gorm:"not null;index" json:"to_stop_id"`
+	Position        int    `gorm:"not null" json:"position"`
+	Mode            string `gorm:"size:50;not null" json:"mode"`
+	DistanceMeters  int    `gorm:"not null" json:"distance_meters"`
+	DurationMinutes int    `gorm:"not null" json:"duration_minutes"`
+	Instruction     string `gorm:"type:text" json:"instruction"`
 }
 
 // InterestsList parses the comma-separated Interests string into a slice of trimmed strings.
