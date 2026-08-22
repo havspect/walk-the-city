@@ -1,20 +1,30 @@
 {{define "trip_row"}}
-<article id="trip-{{.ID}}" class="trip-card">
-    <header>
-        <div class="grid">
+<article id="trip-{{.ID}}" class="trip-card" style="margin-bottom: 1.25rem;">
+    <header style="margin-bottom: 0.5rem; padding-bottom: 0.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
             <div>
-                <strong>{{.Destination}}</strong>
+                <a href="/trips/{{.ID}}" style="font-size: 1.15rem; font-weight: 700; text-decoration: none;">
+                    {{if .City}}{{.City}}{{else}}{{.Destination}}{{end}}
+                </a>
+                {{if .Country}}<small class="muted" style="margin-left: 0.5rem;">({{.Country}})</small>{{end}}
             </div>
-            <div style="text-align: right;">
-                <small>{{.DurationDays}} {{if eq .DurationDays 1}}day{{else}}days{{end}}</small>
+            <div>
+                <span class="badge badge-default">{{.DurationDays}} {{if eq .DurationDays 1}}Day{{else}}Days{{end}}</span>
+                {{if .Month}}<span class="badge badge-gem">📅 {{.Month}}</span>{{end}}
+                {{if .Pace}}<span class="badge badge-architecture">{{.Pace}}</span>{{end}}
             </div>
         </div>
     </header>
+
     {{if .Notes}}
-    <p>{{.Notes}}</p>
+        <p style="font-size: 0.9rem; margin-bottom: 0.75rem;">{{.Notes}}</p>
     {{end}}
-    <footer>
-        <small class="muted">Added {{formatDate .CreatedAt}}</small>
+
+    <footer style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; padding-top: 0.5rem;">
+        <small class="muted">Created {{formatDate .CreatedAt}}</small>
+        <a href="/trips/{{.ID}}" role="button" class="outline btn-sm" style="margin-bottom: 0;">
+            View Full Itinerary →
+        </a>
     </footer>
 </article>
 {{end}}

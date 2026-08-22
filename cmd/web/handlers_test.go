@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/havspect/walk-the-city/assets"
 	"github.com/havspect/walk-the-city/internal/config"
+	"github.com/havspect/walk-the-city/internal/nominatim"
 	"github.com/havspect/walk-the-city/internal/trip"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -39,6 +41,36 @@ func newTestApplication(t *testing.T) *application {
 		t.Fatalf("failed to create test htmlRenderer: %v", err)
 	}
 
+	// Mock Nominatim Server for tests
+	nomServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		w.Header().Set("Content-Type", "application/json")
+		if strings.EqualFold(q, "Rome") {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"place_id":     1001,
+					"display_name": "Rome, Roma Capitale, Lazio, 00187, Italy",
+					"lat":          "41.8933203",
+					"lon":          "12.4829321",
+					"address": map[string]string{
+						"city":         "Rome",
+						"state":        "Lazio",
+						"country":      "Italy",
+						"country_code": "it",
+					},
+				},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]any{})
+	}))
+	t.Cleanup(nomServer.Close)
+
+	nomClient := nominatim.NewClient(
+		nominatim.WithBaseURL(nomServer.URL),
+		nominatim.WithRateLimit(0),
+	)
+
 	app := &application{
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		config: &config.Config{
@@ -47,9 +79,11 @@ func newTestApplication(t *testing.T) *application {
 			LogLevel: "debug",
 			Env:      "test",
 		},
-		html:        renderer,
-		staticFS:    assets.StaticFiles,
-		tripService: trip.NewService(db),
+		html:            renderer,
+		staticFS:        assets.StaticFiles,
+		tripService:     trip.NewService(db),
+		nominatimClient: nomClient,
+		tripGenerator:   trip.NewMockGenerator(),
 	}
 
 	return app
@@ -76,33 +110,23 @@ func TestHandlers_Home(t *testing.T) {
 	if !strings.Contains(bodyStr, "Walk The City") {
 		t.Errorf("expected body to contain 'Walk The City'")
 	}
-	if !strings.Contains(bodyStr, "Plan a Custom City Trip") {
-		t.Errorf("expected body to contain 'Plan a Custom City Trip'")
+	if !strings.Contains(bodyStr, "Step 1: Choose Your Destination") {
+		t.Errorf("expected body to contain Step 1 heading")
 	}
-	if !strings.Contains(bodyStr, "No city trips planned yet") {
-		t.Errorf("expected body to contain empty state message")
+	if !strings.Contains(bodyStr, "Saved City Trips") {
+		t.Errorf("expected body to contain Saved City Trips")
 	}
 }
 
-func TestHandlers_CreateTrip_HTMX_Success(t *testing.T) {
+func TestHandlers_SearchCities(t *testing.T) {
 	app := newTestApplication(t)
 	server := httptest.NewServer(app.routes())
 	defer server.Close()
 
-	formData := url.Values{
-		"destination":   {"Amsterdam"},
-		"duration_days": {"4"},
-		"notes":         {"Canal tour, Jordaan, Van Gogh Museum"},
-	}
-
-	req, _ := http.NewRequest("POST", server.URL+"/trips", strings.NewReader(formData.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("HX-Request", "true")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	// Query for Rome
+	resp, err := http.Get(server.URL + "/api/cities/search?q=Rome")
 	if err != nil {
-		t.Fatalf("failed POST /trips: %v", err)
+		t.Fatalf("failed search request: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -113,39 +137,151 @@ func TestHandlers_CreateTrip_HTMX_Success(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	bodyStr := string(body)
 
-	if !strings.Contains(bodyStr, "Amsterdam") {
-		t.Errorf("expected partial to contain 'Amsterdam', got: %s", bodyStr)
+	if !strings.Contains(bodyStr, "Rome") {
+		t.Errorf("expected search results to contain 'Rome', got: %s", bodyStr)
 	}
-	if !strings.Contains(bodyStr, "4 days") {
-		t.Errorf("expected partial to contain '4 days', got: %s", bodyStr)
+	if !strings.Contains(bodyStr, "Italy") {
+		t.Errorf("expected search results to contain 'Italy', got: %s", bodyStr)
 	}
-	if !strings.Contains(bodyStr, "Canal tour") {
-		t.Errorf("expected partial to contain notes, got: %s", bodyStr)
+	if !strings.Contains(bodyStr, "hx-get=\"/wizard/preferences") {
+		t.Errorf("expected result item to carry hx-get attribute to /wizard/preferences")
 	}
-	// Verify it's a partial (does not contain html/base layout tags)
-	if strings.Contains(bodyStr, "<!doctype html>") {
-		t.Errorf("expected partial response, but got full page layout")
+
+	// Query empty string
+	respEmpty, err := http.Get(server.URL + "/api/cities/search?q=")
+	if err != nil {
+		t.Fatalf("failed empty search: %v", err)
+	}
+	defer respEmpty.Body.Close()
+	if respEmpty.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 OK for empty query, got %d", respEmpty.StatusCode)
 	}
 }
 
-func TestHandlers_CreateTrip_HTMX_ValidationError(t *testing.T) {
+func TestHandlers_WizardPreferences(t *testing.T) {
+	app := newTestApplication(t)
+	server := httptest.NewServer(app.routes())
+	defer server.Close()
+
+	reqURL := fmt.Sprintf("%s/wizard/preferences?destination=%s&city=%s&country=%s&lat=41.8933&lon=12.4829",
+		server.URL, url.QueryEscape("Rome, Lazio, Italy"), url.QueryEscape("Rome"), url.QueryEscape("Italy"))
+
+	resp, err := http.Get(reqURL)
+	if err != nil {
+		t.Fatalf("failed GET /wizard/preferences: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+
+	if !strings.Contains(bodyStr, "Trip Preferences for Rome") {
+		t.Errorf("expected preferences heading for Rome, got: %s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "1. Exploration Pace") {
+		t.Errorf("expected Exploration Pace question in step 2")
+	}
+	if !strings.Contains(bodyStr, "2. Core Interests") {
+		t.Errorf("expected Core Interests question in step 2")
+	}
+	if !strings.Contains(bodyStr, "3. Preferred Mobility") {
+		t.Errorf("expected Preferred Mobility question in step 2")
+	}
+	if !strings.Contains(bodyStr, "Generate City Trip Itinerary") {
+		t.Errorf("expected submit button in step 2")
+	}
+}
+
+func TestHandlers_GenerateTrip_HTMX_Success(t *testing.T) {
 	app := newTestApplication(t)
 	server := httptest.NewServer(app.routes())
 	defer server.Close()
 
 	formData := url.Values{
-		"destination":   {""}, // missing destination
-		"duration_days": {"0"},
+		"destination":   {"Rome, Lazio, Italy"},
+		"city":          {"Rome"},
+		"country":       {"Italy"},
+		"lat":           {"41.8933"},
+		"lon":           {"12.4829"},
+		"month":         {"September"},
+		"duration_days": {"3"},
+		"pace":          {"Moderate"},
+		"interests":     {"Architecture", "History", "Local Food & Living"},
+		"mobility":      {"Walking + Public Transit"},
+		"notes":         {"Staying near Monti"},
 	}
 
-	req, _ := http.NewRequest("POST", server.URL+"/trips", strings.NewReader(formData.Encode()))
+	req, _ := http.NewRequest("POST", server.URL+"/trips/generate", strings.NewReader(formData.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		t.Fatalf("failed POST /trips: %v", err)
+		t.Fatalf("failed POST /trips/generate: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", resp.StatusCode)
+	}
+
+	hxRedirect := resp.Header.Get("HX-Redirect")
+	if !strings.HasPrefix(hxRedirect, "/trips/") {
+		t.Errorf("expected HX-Redirect header to start with '/trips/', got %q", hxRedirect)
+	}
+
+	// Verify we can fetch the generated trip by following the redirect URL
+	respDetail, err := http.Get(server.URL + hxRedirect)
+	if err != nil {
+		t.Fatalf("failed to fetch trip detail: %v", err)
+	}
+	defer respDetail.Body.Close()
+
+	if respDetail.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 OK from detail page, got %d", respDetail.StatusCode)
+	}
+
+	detailBody, _ := io.ReadAll(respDetail.Body)
+	detailStr := string(detailBody)
+
+	if !strings.Contains(detailStr, "Rome") {
+		t.Errorf("expected detail page to contain 'Rome'")
+	}
+	if !strings.Contains(detailStr, "Colosseum") {
+		t.Errorf("expected detail page to contain Colosseum stop")
+	}
+	if !strings.Contains(detailStr, "Pantheon Concrete Dome") {
+		t.Errorf("expected detail page to contain Pantheon highlight card")
+	}
+	if !strings.Contains(detailStr, "Nasone Drinking Fountains") {
+		t.Errorf("expected detail page to contain Nasone cool fact")
+	}
+}
+
+func TestHandlers_GenerateTrip_ValidationError(t *testing.T) {
+	app := newTestApplication(t)
+	server := httptest.NewServer(app.routes())
+	defer server.Close()
+
+	formData := url.Values{
+		"destination":   {""}, // missing destination
+		"month":         {""}, // missing month
+		"duration_days": {"0"},
+	}
+
+	req, _ := http.NewRequest("POST", server.URL+"/trips/generate", strings.NewReader(formData.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("failed POST /trips/generate: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -153,51 +289,30 @@ func TestHandlers_CreateTrip_HTMX_ValidationError(t *testing.T) {
 		t.Errorf("expected 422 Unprocessable Entity, got %d", resp.StatusCode)
 	}
 
-	if retarget := resp.Header.Get("HX-Retarget"); retarget != "#form-errors" {
-		t.Errorf("expected HX-Retarget: #form-errors, got %q", retarget)
-	}
-	if reswap := resp.Header.Get("HX-Reswap"); reswap != "innerHTML" {
-		t.Errorf("expected HX-Reswap: innerHTML, got %q", reswap)
-	}
-
 	body, _ := io.ReadAll(resp.Body)
 	bodyStr := string(body)
 
-	if !strings.Contains(bodyStr, "Destination is required") {
-		t.Errorf("expected error message in response, got: %s", bodyStr)
+	if !strings.Contains(bodyStr, "Destination city is required") {
+		t.Errorf("expected destination error in response, got: %s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "Travel month is required") {
+		t.Errorf("expected month error in response, got: %s", bodyStr)
 	}
 }
 
-func TestHandlers_CreateTrip_StandardBrowser_Success(t *testing.T) {
+func TestHandlers_ShowTrip_NotFound(t *testing.T) {
 	app := newTestApplication(t)
 	server := httptest.NewServer(app.routes())
 	defer server.Close()
 
-	formData := url.Values{
-		"destination":   {"Barcelona"},
-		"duration_days": {"3"},
-		"notes":         {"Sagrada Familia, Park Guell"},
-	}
-
-	// Disable auto-following redirects so we can inspect the 303 status
-	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
-	resp, err := client.PostForm(server.URL+"/trips", formData)
+	resp, err := http.Get(server.URL + "/trips/99999")
 	if err != nil {
-		t.Fatalf("failed POST /trips: %v", err)
+		t.Fatalf("failed GET /trips/99999: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusSeeOther {
-		t.Errorf("expected 303 See Other, got %d", resp.StatusCode)
-	}
-
-	if loc := resp.Header.Get("Location"); loc != "/" {
-		t.Errorf("expected redirect to '/', got %q", loc)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 Not Found, got %d", resp.StatusCode)
 	}
 }
 
@@ -216,8 +331,16 @@ func TestHandlers_StaticAssets(t *testing.T) {
 	if respCSS.StatusCode != http.StatusOK {
 		t.Errorf("expected 200 OK for pico.min.css, got %d", respCSS.StatusCode)
 	}
-	if !strings.Contains(respCSS.Header.Get("Content-Type"), "text/css") {
-		t.Errorf("expected text/css content type, got %s", respCSS.Header.Get("Content-Type"))
+
+	// Check Custom CSS
+	respCustomCSS, err := http.Get(server.URL + "/static/css/custom.css")
+	if err != nil {
+		t.Fatalf("failed to fetch custom.css: %v", err)
+	}
+	defer respCustomCSS.Body.Close()
+
+	if respCustomCSS.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 OK for custom.css, got %d", respCustomCSS.StatusCode)
 	}
 
 	// Check HTMX JS

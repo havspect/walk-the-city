@@ -2,10 +2,15 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
+
+	"github.com/havspect/walk-the-city/internal/trip"
 )
 
 type htmlRenderer struct {
@@ -22,6 +27,71 @@ func newHTMLRenderer(templateFS fs.FS, sharedTemplateFiles ...string) (*htmlRend
 				return ""
 			}
 			return t.Format("Jan 02, 2006")
+		},
+		"osmLink": func(name string, lat, lon float64) template.URL {
+			if lat != 0 && lon != 0 {
+				return template.URL(fmt.Sprintf("https://www.openstreetmap.org/?mlat=%.6f&mlon=%.6f#map=16/%.6f/%.6f", lat, lon, lat, lon))
+			}
+			return template.URL(fmt.Sprintf("https://www.openstreetmap.org/search?query=%s", url.QueryEscape(name)))
+		},
+		"googleMapsLink": func(name string, lat, lon float64) template.URL {
+			if lat != 0 && lon != 0 {
+				return template.URL(fmt.Sprintf("https://www.google.com/maps/search/?api=1&query=%.6f,%.6f", lat, lon))
+			}
+			return template.URL(fmt.Sprintf("https://www.google.com/maps/search/?api=1&query=%s", url.QueryEscape(name)))
+		},
+		"wikiLink": func(args ...string) template.URL {
+			var q string
+			for _, a := range args {
+				trimmed := strings.TrimSpace(a)
+				if trimmed != "" {
+					q = trimmed
+					break
+				}
+			}
+			if q == "" {
+				return template.URL("https://en.wikipedia.org")
+			}
+			return template.URL(fmt.Sprintf("https://en.wikipedia.org/wiki/Special:Search?search=%s", url.QueryEscape(q)))
+		},
+		"categoryBadgeClass": func(category string) string {
+			switch strings.ToLower(category) {
+			case "architecture":
+				return "badge-architecture"
+			case "history":
+				return "badge-history"
+			case "food & living", "food", "dining":
+				return "badge-food"
+			case "hidden gem", "culture":
+				return "badge-gem"
+			case "transit", "walk":
+				return "badge-transit"
+			default:
+				return "badge-default"
+			}
+		},
+		"categoryIcon": func(category string) string {
+			switch strings.ToLower(category) {
+			case "architecture":
+				return "🏛️"
+			case "history":
+				return "📜"
+			case "food & living", "food", "dining":
+				return "🍝"
+			case "hidden gem", "culture":
+				return "💎"
+			case "transit", "walk":
+				return "🚶"
+			default:
+				return "📍"
+			}
+		},
+		"hasItinerary": func(t *trip.Trip) bool {
+			if t == nil {
+				return false
+			}
+			it, err := t.GetItinerary()
+			return err == nil && it != nil && len(it.Days) > 0
 		},
 	}
 

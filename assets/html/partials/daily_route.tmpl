@@ -1,0 +1,109 @@
+{{define "daily_route"}}
+<section class="daily-route-section">
+    <div class="day-header">
+        <h3>Day {{.DayNumber}}: {{.Theme}}</h3>
+    </div>
+
+    {{if .Morning}}
+        <div class="time-block">
+            <h5 class="time-heading">🌅 Morning</h5>
+            <div class="stops-container">
+                {{range .Morning}}
+                    <div class="stop-item">
+                        <div class="stop-meta">
+                            <span class="badge {{categoryBadgeClass .Category}}">{{categoryIcon .Category}} {{.Category}}</span>
+                            {{if .Neighborhood}}<span class="neighborhood-tag">📍 {{.Neighborhood}}</span>{{end}}
+                        </div>
+                        <h4 class="stop-name">{{.Name}}</h4>
+                        <p class="stop-desc">{{.Description}}</p>
+                        {{if or .WalkingMinutes .TransitTip}}
+                            <div class="stop-transit">
+                                <small>
+                                    {{if .WalkingMinutes}}🚶 {{.WalkingMinutes}} min walk{{end}}
+                                    {{if and .WalkingMinutes .TransitTip}} • {{end}}
+                                    {{if .TransitTip}}🚌 {{.TransitTip}}{{end}}
+                                </small>
+                            </div>
+                        {{end}}
+                        <div class="stop-links">
+                            <a href="{{osmLink .Name .Lat .Lon}}" target="_blank" rel="noopener noreferrer" class="link-sm">OpenStreetMap</a>
+                            <span class="dot-sep">•</span>
+                            <a href="{{googleMapsLink .Name .Lat .Lon}}" target="_blank" rel="noopener noreferrer" class="link-sm">Google Maps</a>
+                            <span class="dot-sep">•</span>
+                            <a href="{{wikiLink .WikiQuery .Name}}" target="_blank" rel="noopener noreferrer" class="link-sm">Wikipedia</a>
+                        </div>
+                    </div>
+                {{end}}
+            </div>
+        </div>
+    {{end}}
+
+    {{if .Afternoon}}
+        <div class="time-block">
+            <h5 class="time-heading">☀️ Afternoon</h5>
+            <div class="stops-container">
+                {{range .Afternoon}}
+                    <div class="stop-item">
+                        <div class="stop-meta">
+                            <span class="badge {{categoryBadgeClass .Category}}">{{categoryIcon .Category}} {{.Category}}</span>
+                            {{if .Neighborhood}}<span class="neighborhood-tag">📍 {{.Neighborhood}}</span>{{end}}
+                        </div>
+                        <h4 class="stop-name">{{.Name}}</h4>
+                        <p class="stop-desc">{{.Description}}</p>
+                        {{if or .WalkingMinutes .TransitTip}}
+                            <div class="stop-transit">
+                                <small>
+                                    {{if .WalkingMinutes}}🚶 {{.WalkingMinutes}} min walk{{end}}
+                                    {{if and .WalkingMinutes .TransitTip}} • {{end}}
+                                    {{if .TransitTip}}🚌 {{.TransitTip}}{{end}}
+                                </small>
+                            </div>
+                        {{end}}
+                        <div class="stop-links">
+                            <a href="{{osmLink .Name .Lat .Lon}}" target="_blank" rel="noopener noreferrer" class="link-sm">OpenStreetMap</a>
+                            <span class="dot-sep">•</span>
+                            <a href="{{googleMapsLink .Name .Lat .Lon}}" target="_blank" rel="noopener noreferrer" class="link-sm">Google Maps</a>
+                            <span class="dot-sep">•</span>
+                            <a href="{{wikiLink .WikiQuery .Name}}" target="_blank" rel="noopener noreferrer" class="link-sm">Wikipedia</a>
+                        </div>
+                    </div>
+                {{end}}
+            </div>
+        </div>
+    {{end}}
+
+    {{if .Evening}}
+        <div class="time-block">
+            <h5 class="time-heading">🌙 Evening</h5>
+            <div class="stops-container">
+                {{range .Evening}}
+                    <div class="stop-item">
+                        <div class="stop-meta">
+                            <span class="badge {{categoryBadgeClass .Category}}">{{categoryIcon .Category}} {{.Category}}</span>
+                            {{if .Neighborhood}}<span class="neighborhood-tag">📍 {{.Neighborhood}}</span>{{end}}
+                        </div>
+                        <h4 class="stop-name">{{.Name}}</h4>
+                        <p class="stop-desc">{{.Description}}</p>
+                        {{if or .WalkingMinutes .TransitTip}}
+                            <div class="stop-transit">
+                                <small>
+                                    {{if .WalkingMinutes}}🚶 {{.WalkingMinutes}} min walk{{end}}
+                                    {{if and .WalkingMinutes .TransitTip}} • {{end}}
+                                    {{if .TransitTip}}🚌 {{.TransitTip}}{{end}}
+                                </small>
+                            </div>
+                        {{end}}
+                        <div class="stop-links">
+                            <a href="{{osmLink .Name .Lat .Lon}}" target="_blank" rel="noopener noreferrer" class="link-sm">OpenStreetMap</a>
+                            <span class="dot-sep">•</span>
+                            <a href="{{googleMapsLink .Name .Lat .Lon}}" target="_blank" rel="noopener noreferrer" class="link-sm">Google Maps</a>
+                            <span class="dot-sep">•</span>
+                            <a href="{{wikiLink .WikiQuery .Name}}" target="_blank" rel="noopener noreferrer" class="link-sm">Wikipedia</a>
+                        </div>
+                    </div>
+                {{end}}
+            </div>
+        </div>
+    {{end}}
+</section>
+{{end}}

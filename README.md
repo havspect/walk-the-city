@@ -21,21 +21,29 @@ walk-the-city/
 │   ├── html/                       # Go html/template hierarchy
 │   │   ├── base.tmpl               # Main layout with Pico.css & HTMX
 │   │   ├── pages/                  # Full-page content templates
-│   │   │   └── home.tmpl           # Trip planner home view
+│   │   │   ├── home.tmpl           # Trip planner wizard container & saved trips
+│   │   │   └── trip_detail.tmpl    # Permanent rich itinerary detail view (/trips/{id})
 │   │   └── partials/               # Reusable & HTMX swap partials
+│   │       ├── step1_city.tmpl     # Step 1 destination lookup & autocomplete partial
+│   │       ├── step2_preferences.tmpl # Step 2 preference questionnaire partial
+│   │       ├── generation_loading.tmpl # Synthesis loading indicator
+│   │       ├── trip_card.tmpl      # Unified highlight card component
+│   │       ├── daily_route.tmpl    # Chronological daily walking/transit routes
 │   │       ├── trip_row.tmpl       # Single trip card partial
 │   │       ├── trip_list.tmpl      # Trip list container partial
 │   │       └── form_errors.tmpl    # Validation error feedback partial
-│   └── static/                     # Vendored assets
+│   └── static/                     # Vendored assets & custom theme
 │       ├── css/pico.min.css        # Pico CSS v2.1.1
+│       ├── css/custom.css          # Custom badges, cards, and pill inputs
 │       └── js/htmx.min.js          # HTMX 4.0.0-beta6
 ├── cmd/
 │   └── web/                        # Web server binary entrypoint
 │       ├── main.go                 # Server initialization, config, graceful shutdown
 │       ├── handlers.go             # HTTP route handlers & middleware
 │       ├── handlers_test.go        # HTTP integration test suite
-│       ├── html.go                 # htmlRenderer engine with template caching
-│       └── html_test.go            # HTML renderer unit tests
+│       ├── html.go                 # htmlRenderer engine with template caching & deep-link helpers
+│       ├── html_test.go            # HTML renderer & helper unit tests
+│       └── wizard_integration_test.go # Full end-to-end wizard flow integration tests
 ├── internal/                       # Internal application packages
 │   ├── config/                     # Environment configuration loader
 │   │   ├── config.go
@@ -43,10 +51,17 @@ walk-the-city/
 │   ├── database/                   # SQLite connection & auto-migration
 │   │   ├── database.go
 │   │   └── database_test.go
-│   └── trip/                       # Trip domain entity & service seam
-│       ├── model.go                # Trip GORM model
+│   ├── nominatim/                  # OpenStreetMap Nominatim search client & caching
+│   │   ├── client.go
+│   │   └── client_test.go
+│   └── trip/                       # Trip domain entities, service seam & generation
+│       ├── model.go                # Trip entity & typed Itinerary/DayPlan/Stop/Card models
+│       ├── model_test.go           # Domain model serialization tests
 │       ├── service.go              # TripService business interface & repo
-│       └── service_test.go         # Service unit test suite
+│       ├── service_test.go         # Service unit test suite
+│       ├── generator.go            # TripGenerator interface
+│       ├── generator_mock.go       # Deterministic mock/placeholder generator
+│       └── generator_test.go       # Generator unit tests
 ├── docs/plans/                     # Technical specifications & plans
 ├── .env.example                    # Sample environment variables
 ├── go.mod                          # Go module dependencies
@@ -125,13 +140,19 @@ The application follows the [HTMX with Go pattern by Alex Edwards](https://www.a
 - Responses set `Vary: HX-Request` to ensure caching layers differentiate between partial and full-page responses.
 - Validation errors on HTMX form submissions issue `422 Unprocessable Entity` with `HX-Retarget: #form-errors` and `HX-Reswap: innerHTML` to render error feedback in place.
 
-### 2. Agent Integration Seam
-The business domain is isolated in `internal/trip/service.go` behind the `TripService` interface:
+### 2. City Trip Planning Wizard & Agent Integration Seam
+The application provides a 2-step HTMX trip planning flow:
+1. **Step 1 (City Search):** Uses a server-proxied OpenStreetMap Nominatim client in `internal/nominatim` with in-memory TTL caching and rate limiting.
+2. **Step 2 (Preferences):** Collects the travel month and 3 structured inputs:
+   - Exploration Pace (Relaxed, Moderate, Packed)
+   - Core Interests (Architecture, History, Local Food & Living, Hidden Gems, Parks)
+   - Preferred Mobility (Walking + Transit, Walking Only, Bicycle, Accessible)
+3. **Step 3 (Itinerary Generation & Permanent Link):** Synthesizes a hybrid itinerary with daily routes and unified visual cards, persists to SQLite, and displays at a permanent `/trips/{id}` URL with OpenStreetMap, Google Maps, and Wikipedia deep links.
+
+The generation engine is decoupled behind the `TripGenerator` interface in `internal/trip/generator.go`:
 ```go
-type TripService interface {
-    CreateTrip(ctx context.Context, params CreateTripParams) (*Trip, error)
-    ListTrips(ctx context.Context) ([]Trip, error)
-    GetTripByID(ctx context.Context, id uint) (*Trip, error)
+type TripGenerator interface {
+    Generate(ctx context.Context, params CreateTripParams) (*Itinerary, error)
 }
 ```
-HTTP handlers interact exclusively with this service. Future LLM/AI agent trip generation workflows can seamlessly hook into this same interface without coupling to HTTP transport or database plumbing.
+A deterministic `MockGenerator` is used by default for zero-setup local development and automated CI testing. Future LLM/agent implementations can implement `TripGenerator` to provide dynamic AI synthesis.

@@ -14,15 +14,18 @@ import (
 	"github.com/havspect/walk-the-city/assets"
 	"github.com/havspect/walk-the-city/internal/config"
 	"github.com/havspect/walk-the-city/internal/database"
+	"github.com/havspect/walk-the-city/internal/nominatim"
 	"github.com/havspect/walk-the-city/internal/trip"
 )
 
 type application struct {
-	logger      *slog.Logger
-	config      *config.Config
-	html        *htmlRenderer
-	staticFS    fs.FS
-	tripService trip.TripService
+	logger          *slog.Logger
+	config          *config.Config
+	html            *htmlRenderer
+	staticFS        fs.FS
+	tripService     trip.TripService
+	nominatimClient *nominatim.Client
+	tripGenerator   trip.TripGenerator
 }
 
 func main() {
@@ -63,11 +66,13 @@ func main() {
 	}
 
 	app := &application{
-		logger:      logger,
-		config:      cfg,
-		html:        renderer,
-		staticFS:    assets.StaticFiles,
-		tripService: trip.NewService(db),
+		logger:          logger,
+		config:          cfg,
+		html:            renderer,
+		staticFS:        assets.StaticFiles,
+		tripService:     trip.NewService(db),
+		nominatimClient: nominatim.NewClient(),
+		tripGenerator:   trip.NewMockGenerator(),
 	}
 
 	srv := &http.Server{
