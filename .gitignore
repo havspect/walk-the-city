@@ -27,6 +27,16 @@ go.work.sum
 # env file
 .env
 
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.sqlite
+*.sqlite3
+data/
+
 # Editor/IDE
 # .idea/
 # .vscode/
+# Compound Engineering local scratch
+.context/compound-engineering/
