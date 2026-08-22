@@ -1,0 +1,20 @@
+{{define "trip_row"}}
+<article id="trip-{{.ID}}" class="trip-card">
+    <header>
+        <div class="grid">
+            <div>
+                <strong>{{.Destination}}</strong>
+            </div>
+            <div style="text-align: right;">
+                <small>{{.DurationDays}} {{if eq .DurationDays 1}}day{{else}}days{{end}}</small>
+            </div>
+        </div>
+    </header>
+    {{if .Notes}}
+    <p>{{.Notes}}</p>
+    {{end}}
+    <footer>
+        <small class="muted">Added {{formatDate .CreatedAt}}</small>
+    </footer>
+</article>
+{{end}}
