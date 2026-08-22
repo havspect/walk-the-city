@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 
 	"github.com/havspect/walk-the-city/internal/trip"
@@ -36,6 +37,9 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) createTrip(w http.ResponseWriter, r *http.Request) {
+	// Limit form body size to 4KB to prevent oversized payloads
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
@@ -52,9 +56,15 @@ func (app *application) createTrip(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var valErr *trip.ValidationError
 		if errors.As(err, &valErr) {
+			keys := make([]string, 0, len(valErr.FieldErrors))
+			for field := range valErr.FieldErrors {
+				keys = append(keys, field)
+			}
+			sort.Strings(keys)
+
 			var errMsgs []string
-			for _, msg := range valErr.FieldErrors {
-				errMsgs = append(errMsgs, msg)
+			for _, field := range keys {
+				errMsgs = append(errMsgs, valErr.FieldErrors[field])
 			}
 
 			if isHTMXRequest(r) {

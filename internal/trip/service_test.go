@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -77,6 +78,11 @@ func TestTripService_CreateTrip(t *testing.T) {
 			name:        "duration too large",
 			params:      CreateTripParams{Destination: "Berlin", DurationDays: 31},
 			expectField: "duration_days",
+		},
+		{
+			name:        "notes too long",
+			params:      CreateTripParams{Destination: "Rome", DurationDays: 3, Notes: strings.Repeat("A", 2001)},
+			expectField: "notes",
 		},
 	}
 

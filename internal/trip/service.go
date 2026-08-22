@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"gorm.io/gorm"
@@ -20,9 +21,15 @@ type ValidationError struct {
 }
 
 func (v *ValidationError) Error() string {
+	keys := make([]string, 0, len(v.FieldErrors))
+	for field := range v.FieldErrors {
+		keys = append(keys, field)
+	}
+	sort.Strings(keys)
+
 	var msgs []string
-	for field, msg := range v.FieldErrors {
-		msgs = append(msgs, fmt.Sprintf("%s: %s", field, msg))
+	for _, field := range keys {
+		msgs = append(msgs, fmt.Sprintf("%s: %s", field, v.FieldErrors[field]))
 	}
 	return strings.Join(msgs, ", ")
 }
@@ -47,6 +54,11 @@ func (p CreateTripParams) Validate() *ValidationError {
 
 	if p.DurationDays < 1 || p.DurationDays > 30 {
 		errs["duration_days"] = "Duration must be between 1 and 30 days"
+	}
+
+	notes := strings.TrimSpace(p.Notes)
+	if len(notes) > 2000 {
+		errs["notes"] = "Notes cannot exceed 2000 characters"
 	}
 
 	if len(errs) > 0 {

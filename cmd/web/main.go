@@ -105,5 +105,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Close database connection cleanly to flush WAL
+	if sqlDB, err := db.DB(); err == nil {
+		if closeErr := sqlDB.Close(); closeErr != nil {
+			logger.Warn("failed to close database", "error", closeErr)
+		}
+	}
+
 	logger.Info("server stopped gracefully")
 }
