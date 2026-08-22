@@ -43,6 +43,11 @@ func OpenDSN(dsn string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
+	// Enforce FK constraints for cascade deletes (SQLite defaults OFF per connection).
+	if err := db.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
+		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+
 	if err := db.AutoMigrate(&trip.Trip{}, &trip.Itinerary{}, &trip.Stop{}, &trip.Segment{}); err != nil {
 		return nil, fmt.Errorf("failed to auto-migrate database schema: %w", err)
 	}
@@ -55,8 +60,14 @@ func isMemoryPath(path string) bool {
 }
 
 func formatDSN(dbPath string) string {
+	fk := "_pragma=foreign_keys(1)"
+	wal := "_pragma=journal_mode(WAL)"
+	busy := "_pragma=busy_timeout(5000)"
 	if isMemoryPath(dbPath) {
-		return dbPath
+		if strings.Contains(dbPath, "?") {
+			return dbPath + "&" + busy + "&" + wal + "&" + fk
+		}
+		return dbPath + "?" + busy + "&" + wal + "&" + fk
 	}
-	return fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)", dbPath)
+	return fmt.Sprintf("file:%s?%s&%s&%s", dbPath, busy, wal, fk)
 }

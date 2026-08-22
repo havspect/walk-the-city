@@ -93,9 +93,63 @@ func NewService(db *gorm.DB) TripService {
 	return &service{db: db}
 }
 
+func validateItineraries(itins []*Itinerary) *ValidationError {
+	errs := make(map[string]string)
+	for i, itin := range itins {
+		if itin == nil {
+			continue
+		}
+		prefix := fmt.Sprintf("itineraries[%d]", i)
+		if itin.Title == "" && len(itin.Stops) > 0 {
+			// Title is expected for stacked sections; advisory but not hard fail (generator always sets it)
+		}
+		// Validate stops
+		for j, st := range itin.Stops {
+			if !ValidStopKinds[st.Kind] {
+				errs[fmt.Sprintf("%s.stops[%d].kind", prefix, j)] = fmt.Sprintf("invalid stop kind %q", st.Kind)
+			}
+			if strings.TrimSpace(st.Title) == "" {
+				errs[fmt.Sprintf("%s.stops[%d].title", prefix, j)] = "stop title is required"
+			}
+			if strings.TrimSpace(st.Body) == "" {
+				errs[fmt.Sprintf("%s.stops[%d].body", prefix, j)] = "stop body is required"
+			}
+			if st.ImageSource != "" && !ValidImageSources[st.ImageSource] {
+				errs[fmt.Sprintf("%s.stops[%d].image_source", prefix, j)] = fmt.Sprintf("invalid image_source %q", st.ImageSource)
+			}
+		}
+		// N-1 invariant (R12): N stops => N-1 segments; 0/1 stop => 0 segments
+		wantSegs := 0
+		if len(itin.Stops) >= 2 {
+			wantSegs = len(itin.Stops) - 1
+		}
+		if len(itin.Segments) != wantSegs {
+			errs[fmt.Sprintf("%s.segments", prefix)] = fmt.Sprintf("expected %d segments for %d stops, got %d", wantSegs, len(itin.Stops), len(itin.Segments))
+		}
+		for j, seg := range itin.Segments {
+			if !ValidSegmentModes[seg.Mode] {
+				errs[fmt.Sprintf("%s.segments[%d].mode", prefix, j)] = fmt.Sprintf("invalid segment mode %q", seg.Mode)
+			}
+			if seg.DistanceMeters <= 0 {
+				errs[fmt.Sprintf("%s.segments[%d].distance_meters", prefix, j)] = "distance must be > 0"
+			}
+			if seg.DurationMinutes <= 0 {
+				errs[fmt.Sprintf("%s.segments[%d].duration_minutes", prefix, j)] = "duration must be > 0"
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return &ValidationError{FieldErrors: errs}
+	}
+	return nil
+}
+
 func (s *service) CreateTrip(ctx context.Context, params CreateTripParams) (*Trip, error) {
 	if validationErr := params.Validate(); validationErr != nil {
 		return nil, validationErr
+	}
+	if v := validateItineraries(params.Itineraries); v != nil {
+		return nil, v
 	}
 
 	cityName := strings.TrimSpace(params.City)

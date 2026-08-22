@@ -3,6 +3,8 @@ package trip
 import (
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // StopKind discriminates the uniform highlight-card type.
@@ -41,6 +43,18 @@ var ValidSegmentModes = map[string]bool{
 	SegmentModeTransit: true,
 	SegmentModeBicycle: true,
 	SegmentModeDrive:   true,
+}
+
+// ImageSource constants for Stop images (R17-R19).
+const (
+	ImageSourcePlaceholder = "placeholder"
+	ImageSourceBFLFlux     = "bfl_flux"
+)
+
+// ValidImageSources is the allowed set for Stop.ImageSource.
+var ValidImageSources = map[string]bool{
+	ImageSourcePlaceholder: true,
+	ImageSourceBFLFlux:     true,
 }
 
 // Trip is the base entity. It owns many alternative Itineraries (R1).
@@ -100,6 +114,37 @@ type Stop struct {
 	ImageCredit string `gorm:"size:255" json:"image_credit"`
 	ImageSource string `gorm:"size:50" json:"image_source"`
 	ImagePrompt string `gorm:"type:text" json:"image_prompt"`
+}
+
+// BeforeCreate ensures every Stop has a non-empty ImageURL (R19). Direct DB writes
+// bypassing TripService still get a deterministic placeholder.
+func (s *Stop) BeforeCreate(tx *gorm.DB) error {
+	if strings.TrimSpace(s.ImageURL) == "" {
+		title := strings.TrimSpace(s.Title)
+		if title == "" {
+			title = "walk-the-city"
+		}
+		seed := strings.ToLower(title)
+		seed = strings.ReplaceAll(seed, " ", "-")
+		var b strings.Builder
+		for _, r := range seed {
+			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+				b.WriteRune(r)
+			}
+		}
+		out := b.String()
+		if out == "" {
+			out = "walk-the-city"
+		}
+		if len(out) > 40 {
+			out = out[:40]
+		}
+		s.ImageURL = "https://picsum.photos/seed/" + out + "/600/400"
+	}
+	if strings.TrimSpace(s.ImageSource) == "" {
+		s.ImageSource = ImageSourcePlaceholder
+	}
+	return nil
 }
 
 // Segment connects two consecutive Stops within one Itinerary (R11-R13).
