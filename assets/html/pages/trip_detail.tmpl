@@ -1,0 +1,45 @@
+{{define "page:title"}}{{if .Trip.City}}{{.Trip.City}}{{else}}{{.Trip.Destination}}{{end}} City Trip{{end}}
+
+{{define "page:content"}}
+<section class="trip-hero">
+    <div style="margin-bottom: 1rem;">
+        <a href="/" class="secondary" style="font-size: 0.9rem; text-decoration: none;">← Back to Trip Planner</a>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h1 style="margin-bottom: 0.25rem;">{{if .Trip.City}}{{.Trip.City}}{{else}}{{.Trip.Destination}}{{end}}</h1>
+            <p class="muted" style="margin-bottom: 0.5rem; font-size: 1.05rem;">📍 {{.Trip.Destination}}</p>
+        </div>
+        <div>
+            <button onclick="window.print()" class="outline secondary btn-sm" style="margin-bottom: 0;">
+                🖨️ Print Itinerary
+            </button>
+        </div>
+    </div>
+
+    <div class="trip-meta-pills">
+        {{if .Trip.Month}}<span class="meta-pill">📅 <strong>Month:</strong> {{.Trip.Month}}</span>{{end}}
+        <span class="meta-pill">⏱️ <strong>Duration:</strong> {{.Trip.DurationDays}} {{if eq .Trip.DurationDays 1}}Day{{else}}Days{{end}}</span>
+        {{if .Trip.Pace}}<span class="meta-pill">⚡ <strong>Pace:</strong> {{.Trip.Pace}}</span>{{end}}
+        {{if .Trip.Mobility}}<span class="meta-pill">🚶 <strong>Mobility:</strong> {{.Trip.Mobility}}</span>{{end}}
+        {{if .Trip.Interests}}<span class="meta-pill">🎯 <strong>Interests:</strong> {{.Trip.Interests}}</span>{{end}}
+    </div>
+</section>
+
+{{if hasItineraries .Trip}}
+    <section style="margin-bottom: 1rem;">
+        <h2 style="margin-bottom: 1rem; border-bottom: 2px solid var(--pico-muted-border-color); padding-bottom: 0.5rem;">
+            🗺️ Your Itineraries — {{len .Trip.Itineraries}} alternative plan{{if gt (len .Trip.Itineraries) 1}}s{{end}}
+        </h2>
+        {{range .Trip.Itineraries}}
+            {{template "itinerary_section" .}}
+        {{end}}
+    </section>
+{{else}}
+    <article style="text-align: center; padding: 2rem;">
+        <h3>Trip Overview</h3>
+        <p>{{if .Trip.Notes}}{{.Trip.Notes}}{{else}}No itinerary generated yet — try generating a trip with the wizard.{{end}}</p>
+    </article>
+{{end}}
+{{end}}

@@ -1,0 +1,52 @@
+{{define "step1_city"}}
+<div id="wizard-step1">
+    <div class="wizard-header" style="margin-bottom: 1.5rem;">
+        <h3>Step 1: Choose Your Destination</h3>
+        <p class="muted">Search any city worldwide to begin crafting your personalized walking and cultural itinerary.</p>
+    </div>
+
+    <div style="position: relative; margin-bottom: 2rem;">
+        <label for="city-search-input">
+            City Name or Destination
+            <input 
+                type="search" 
+                id="city-search-input" 
+                name="q" 
+                placeholder="Type a city name, e.g. Rome, Kyoto, Barcelona, Amsterdam..." 
+                autocomplete="off"
+                hx-get="/api/cities/search" 
+                hx-trigger="input changed delay:350ms, search" 
+                hx-target="#city-search-results"
+                hx-indicator="#search-spinner"
+                autofocus
+            >
+        </label>
+        <span id="search-spinner" class="htmx-indicator" style="position: absolute; right: 1rem; top: 2.7rem;">
+            <small>Searching...</small>
+        </span>
+        <div id="city-search-results"></div>
+    </div>
+</div>
+{{end}}
+
+{{define "city_search_results"}}
+{{if .Results}}
+    <ul class="city-results-dropdown">
+        {{range .Results}}
+            <li class="city-result-item" 
+                hx-get="/wizard/preferences?destination={{.DisplayName}}&city={{.City}}&country={{.Country}}&lat={{.Lat}}&lon={{.Lon}}" 
+                hx-target="#wizard-container" 
+                hx-swap="innerHTML">
+                <strong>{{.City}}</strong>
+                {{if .State}}<span class="muted">, {{.State}}</span>{{end}}
+                {{if .Country}}<span class="muted">, {{.Country}}</span>{{end}}
+                <small style="display: block; color: var(--pico-muted-color); font-size: 0.75rem;">{{.DisplayName}}</small>
+            </li>
+        {{end}}
+    </ul>
+{{else if .Query}}
+    <div class="city-results-dropdown" style="padding: 1rem; color: var(--pico-muted-color); text-align: center;">
+        <small>No matching cities found for "{{.Query}}". Try another spelling.</small>
+    </div>
+{{end}}
+{{end}}

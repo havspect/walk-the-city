@@ -1,0 +1,12 @@
+{{define "form_errors"}}
+{{if .}}
+    <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--pico-del-color); border-radius: var(--pico-border-radius); background-color: rgba(235, 57, 57, 0.08);">
+        <strong>Please correct the following:</strong>
+        <ul style="margin-bottom: 0; margin-top: 0.5rem;">
+            {{range .}}
+                <li>{{.}}</li>
+            {{end}}
+        </ul>
+    </div>
+{{end}}
+{{end}}

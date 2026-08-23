@@ -1,0 +1,18 @@
+{{define "page:title"}}City Trip Planner{{end}}
+
+{{define "page:content"}}
+<section class="wizard-section" style="margin-bottom: 3rem;">
+    <div id="wizard-container">
+        {{template "step1_city" .}}
+    </div>
+</section>
+
+<hr style="margin: 2.5rem 0;">
+
+<section class="saved-trips-section">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3 style="margin-bottom: 0;">Saved City Trips</h3>
+    </div>
+    {{template "trip_list" .}}
+</section>
+{{end}}

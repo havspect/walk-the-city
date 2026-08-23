@@ -1,0 +1,162 @@
+{{define "step2_preferences"}}
+<div id="wizard-step2">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap;">
+        <div>
+            <small style="text-transform: uppercase; letter-spacing: 0.05em; color: var(--pico-primary); font-weight: 600;">Step 2 of 2</small>
+            <h3 style="margin-bottom: 0.25rem;">Trip Preferences for {{if .City}}{{.City}}{{else}}{{.Destination}}{{end}}</h3>
+            {{if .Country}}<p class="muted" style="margin-bottom: 0;">📍 {{.Destination}}</p>{{end}}
+        </div>
+        <div>
+            <button class="outline secondary btn-sm" hx-get="/" hx-target="body" style="margin-bottom: 0;">
+                ← Change City
+            </button>
+        </div>
+    </div>
+
+    <div id="wizard-errors">
+        {{if .Errors}}
+            {{template "form_errors" .Errors}}
+        {{end}}
+    </div>
+
+    <form hx-post="/trips/generate" hx-target="#wizard-container" hx-indicator="#generation-spinner">
+        <input type="hidden" name="destination" value="{{.Destination}}">
+        <input type="hidden" name="city" value="{{.City}}">
+        <input type="hidden" name="country" value="{{.Country}}">
+        <input type="hidden" name="lat" value="{{.Lat}}">
+        <input type="hidden" name="lon" value="{{.Lon}}">
+
+        <div class="grid">
+            <label for="month">
+                Travel Month
+                <select id="month" name="month" required>
+                    <option value="">Select month of travel...</option>
+                    <option value="January" {{if eq .Month "January"}}selected{{end}}>January</option>
+                    <option value="February" {{if eq .Month "February"}}selected{{end}}>February</option>
+                    <option value="March" {{if eq .Month "March"}}selected{{end}}>March</option>
+                    <option value="April" {{if eq .Month "April"}}selected{{end}}>April</option>
+                    <option value="May" {{if eq .Month "May"}}selected{{end}}>May</option>
+                    <option value="June" {{if eq .Month "June"}}selected{{end}}>June</option>
+                    <option value="July" {{if eq .Month "July"}}selected{{end}}>July</option>
+                    <option value="August" {{if eq .Month "August"}}selected{{end}}>August</option>
+                    <option value="September" {{if or (eq .Month "September") (eq .Month "")}}selected{{end}}>September</option>
+                    <option value="October" {{if eq .Month "October"}}selected{{end}}>October</option>
+                    <option value="November" {{if eq .Month "November"}}selected{{end}}>November</option>
+                    <option value="December" {{if eq .Month "December"}}selected{{end}}>December</option>
+                </select>
+            </label>
+
+            <label for="duration_days">
+                Duration (Days)
+                <input type="number" id="duration_days" name="duration_days" min="1" max="14" value="{{if .DurationDays}}{{.DurationDays}}{{else}}3{{end}}" required>
+            </label>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">1. Exploration Pace</label>
+            <div class="pill-grid">
+                <div class="pill-option">
+                    <label>
+                        <input type="radio" name="pace" value="Relaxed" {{if eq .Pace "Relaxed"}}checked{{end}}>
+                        <span>☕ Relaxed (Fewer stops, long breaks)</span>
+                    </label>
+                </div>
+                <div class="pill-option">
+                    <label>
+                        <input type="radio" name="pace" value="Moderate" {{if or (eq .Pace "Moderate") (eq .Pace "")}}checked{{end}}>
+                        <span>🚶 Moderate (Balanced sights & dining)</span>
+                    </label>
+                </div>
+                <div class="pill-option">
+                    <label>
+                        <input type="radio" name="pace" value="Packed" {{if eq .Pace "Packed"}}checked{{end}}>
+                        <span>⚡ Packed (See as much as possible)</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">2. Core Interests (Pick one or more)</label>
+            <div class="pill-grid">
+                <div class="pill-option">
+                    <label>
+                        <input type="checkbox" name="interests" value="Architecture" checked>
+                        <span>🏛️ Architectural Highlights</span>
+                    </label>
+                </div>
+                <div class="pill-option">
+                    <label>
+                        <input type="checkbox" name="interests" value="History" checked>
+                        <span>📜 Historical Origins & Stories</span>
+                    </label>
+                </div>
+                <div class="pill-option">
+                    <label>
+                        <input type="checkbox" name="interests" value="Local Food & Living" checked>
+                        <span>🍝 Non-touristic Local Food</span>
+                    </label>
+                </div>
+                <div class="pill-option">
+                    <label>
+                        <input type="checkbox" name="interests" value="Hidden Gems">
+                        <span>💎 Hidden Gems & Quarters</span>
+                    </label>
+                </div>
+                <div class="pill-option">
+                    <label>
+                        <input type="checkbox" name="interests" value="Nature & Parks">
+                        <span>🌳 Gardens & Scenic Views</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">3. Preferred Mobility</label>
+            <div class="pill-grid">
+                <div class="pill-option">
+                    <label>
+                        <input type="radio" name="mobility" value="Walking + Public Transit" {{if or (eq .Mobility "Walking + Public Transit") (eq .Mobility "")}}checked{{end}}>
+                        <span>🚶 + 🚌 Walking & Public Transit</span>
+                    </label>
+                </div>
+                <div class="pill-option">
+                    <label>
+                        <input type="radio" name="mobility" value="Walking Only" {{if eq .Mobility "Walking Only"}}checked{{end}}>
+                        <span>🚶 Walking Only</span>
+                    </label>
+                </div>
+                <div class="pill-option">
+                    <label>
+                        <input type="radio" name="mobility" value="Bicycle" {{if eq .Mobility "Bicycle"}}checked{{end}}>
+                        <span>🚲 Bicycle / Micromobility</span>
+                    </label>
+                </div>
+                <div class="pill-option">
+                    <label>
+                        <input type="radio" name="mobility" value="Accessible" {{if eq .Mobility "Accessible"}}checked{{end}}>
+                        <span>♿ Step-Free / Accessible</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <label for="notes">
+            Special Requests or Specific Areas (Optional)
+            <textarea id="notes" name="notes" rows="2" placeholder="e.g. Staying near Trastevere, love quiet morning coffee spots...">{{.Notes}}</textarea>
+        </label>
+
+        <button type="submit" style="width: 100%; font-size: 1.1rem; padding: 0.85rem;">
+            ✨ Generate City Trip Itinerary
+        </button>
+    </form>
+
+    <div id="generation-spinner" class="htmx-indicator" style="margin-top: 1.5rem; text-align: center;">
+        <article style="background: #f8fafc; border: 1px dashed var(--pico-primary); padding: 1.5rem;">
+            <h4 style="margin-bottom: 0.5rem;">Synthesizing your {{if .City}}{{.City}}{{else}}City{{end}} Itinerary...</h4>
+            <p class="muted" style="margin-bottom: 0;"><small>Curating daily walking routes, architectural lore, and authentic dining spots.</small></p>
+        </article>
+    </div>
+</div>
+{{end}}

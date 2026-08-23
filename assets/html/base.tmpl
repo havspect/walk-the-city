@@ -1,0 +1,31 @@
+{{define "base"}}
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>{{template "page:title" .}} · Walk The City</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="/static/css/pico.min.css">
+        <link rel="stylesheet" href="/static/css/custom.css">
+        <script defer src="/static/js/htmx.min.js"></script>
+    </head>
+    <body>
+        <header class="container">
+            <nav>
+                <ul>
+                    <li><strong><a href="/" class="contrast">Walk The City</a></strong></li>
+                </ul>
+                <ul>
+                    <li><small>City Trip Planner</small></li>
+                </ul>
+            </nav>
+        </header>
+        <main class="container">
+            {{template "page:content" .}}
+        </main>
+        <footer class="container">
+            <small>&copy; Walk The City</small>
+        </footer>
+    </body>
+</html>
+{{end}}

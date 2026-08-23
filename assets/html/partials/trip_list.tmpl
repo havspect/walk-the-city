@@ -1,0 +1,11 @@
+{{define "trip_list"}}
+<div id="trip-list">
+    {{if .Trips}}
+        {{range .Trips}}
+            {{template "trip_row" .}}
+        {{end}}
+    {{else}}
+        <p id="empty-state" class="muted">No city trips planned yet. Create your first itinerary above!</p>
+    {{end}}
+</div>
+{{end}}
