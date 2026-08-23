@@ -55,9 +55,11 @@ walk-the-city/
 │   │   ├── client.go
 │   │   └── client_test.go
 │   └── trip/                       # Trip domain entities, service seam & generation
-│       ├── model.go                # Trip entity & typed Itinerary/DayPlan/Stop/Card models
+│       ├── model.go                # Trip, Itinerary, Stop, Segment models & hooks
 │       ├── model_test.go           # Domain model serialization tests
-│       ├── service.go              # TripService business interface & repo
+│       ├── repositories.go         # Trip/Itinerary/Stop/Segment repositories (ordered preloads)
+│       ├── repositories_test.go    # Repository test suite
+│       ├── service.go              # TripService business interface & transaction
 │       ├── service_test.go         # Service unit test suite
 │       ├── generator.go            # TripGenerator interface
 │       ├── generator_mock.go       # Deterministic mock/placeholder generator

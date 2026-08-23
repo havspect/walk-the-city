@@ -23,7 +23,7 @@ type application struct {
 	config          *config.Config
 	html            *htmlRenderer
 	staticFS        fs.FS
-	tripService     trip.TripService
+	tripRepo        trip.TripService
 	nominatimClient *nominatim.Client
 	tripGenerator   trip.TripGenerator
 }
@@ -70,7 +70,7 @@ func main() {
 		config:          cfg,
 		html:            renderer,
 		staticFS:        assets.StaticFiles,
-		tripService:     trip.NewService(db),
+		tripRepo:        trip.NewService(db),
 		nominatimClient: nominatim.NewClient(),
 		tripGenerator:   trip.NewMockGenerator(),
 	}

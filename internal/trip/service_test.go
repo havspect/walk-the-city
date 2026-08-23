@@ -192,3 +192,154 @@ func TestTripService_GenerateAndSaveTrip(t *testing.T) {
 		t.Fatalf("expected 2 itineraries from mock, got %d", len(trip.Itineraries))
 	}
 }
+
+func TestTripService_CreateTrip_ValidationItineraries(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	// Invalid stop kind
+	_, err := svc.CreateTrip(ctx, CreateTripParams{
+		Destination:  "Rome",
+		DurationDays: 2,
+		Itineraries: []*Itinerary{
+			{
+				Title: "T", Stops: []Stop{{Kind: "Bogus", Title: "S", Body: "b", ImageURL: "https://example.com/x.jpg"}},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected validation error for bogus kind")
+	}
+	var valErr *ValidationError
+	if !errors.As(err, &valErr) {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+
+	// Wrong segment count (N-1 invariant)
+	_, err = svc.CreateTrip(ctx, CreateTripParams{
+		Destination:  "Rome",
+		DurationDays: 2,
+		Itineraries: []*Itinerary{
+			{
+				Title: "T",
+				Stops: []Stop{
+					{Kind: StopKindLandmark, Title: "S1", Body: "b", ImageURL: "https://example.com/a.jpg"},
+					{Kind: StopKindLandmark, Title: "S2", Body: "b", ImageURL: "https://example.com/b.jpg"},
+				},
+				Segments: []Segment{{Mode: SegmentModeWalk, DistanceMeters: 100, DurationMinutes: 5, Instruction: "x"}, {Mode: SegmentModeWalk, DistanceMeters: 100, DurationMinutes: 5, Instruction: "y"}}, // want 1, got 2
+			},
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected validation error for segment count")
+	}
+	if !errors.As(err, &valErr) {
+		t.Fatalf("expected ValidationError for segment count")
+	}
+
+	// Ensure nothing was written via unscoped count
+	var count int64
+	db.Unscoped().Model(&Trip{}).Count(&count)
+	if count != 0 {
+		t.Errorf("expected 0 trips after validation failures, got %d", count)
+	}
+}
+
+func TestTripService_CreateTrip_Rollback(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	// Inject a failing create callback for Segment to force mid-transaction rollback
+	cbName := "test_fail_segment_create"
+	err := db.Callback().Create().Before("gorm:create").Register(cbName, func(tx *gorm.DB) {
+		if tx.Statement.Model != nil {
+			if _, ok := tx.Statement.Model.(*Segment); ok {
+				tx.AddError(errors.New("injected failure"))
+			}
+			// Also handle non-pointer model type
+			if tx.Statement.ReflectValue.IsValid() {
+				if tx.Statement.ReflectValue.Type().Name() == "Segment" {
+					tx.AddError(errors.New("injected failure"))
+				}
+			}
+		}
+	})
+	if err != nil {
+		t.Fatalf("register callback: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Callback().Create().Remove(cbName)
+	})
+
+	gen := NewMockGenerator()
+	itins, _ := gen.Generate(ctx, CreateTripParams{Destination: "Rome", City: "Rome", DurationDays: 2})
+	_, err = svc.CreateTrip(ctx, CreateTripParams{
+		Destination:  "Rome",
+		DurationDays: 2,
+		Itineraries:  itins,
+	})
+	if err == nil {
+		t.Fatalf("expected injected error")
+	}
+	// Rollback: no trip should remain, even via unscoped count
+	var count int64
+	db.Unscoped().Model(&Trip{}).Count(&count)
+	if count != 0 {
+		t.Errorf("expected 0 trips after rollback, got %d", count)
+	}
+	db.Unscoped().Model(&Itinerary{}).Count(&count)
+	if count != 0 {
+		t.Errorf("expected 0 itineraries after rollback, got %d", count)
+	}
+}
+
+func TestTripService_CreateTrip_PlaceholderViaHook(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	created, err := svc.CreateTrip(ctx, CreateTripParams{
+		Destination:  "Rome",
+		DurationDays: 1,
+		Itineraries: []*Itinerary{
+			{
+				Title: "T", Stops: []Stop{{Kind: StopKindLandmark, Title: "Empty Image", Body: "body", ImageURL: ""}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(created.Itineraries) == 0 || len(created.Itineraries[0].Stops) == 0 {
+		t.Fatalf("expected stops")
+	}
+	st := created.Itineraries[0].Stops[0]
+	if st.ImageURL == "" {
+		t.Errorf("expected placeholder ImageURL via hook")
+	}
+	if st.ImageSource != ImageSourcePlaceholder {
+		t.Errorf("expected placeholder source, got %q", st.ImageSource)
+	}
+}
+
+func TestTripService_GenerateAndSaveTrip_NilGenerator(t *testing.T) {
+	db := setupTestDB(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	created, err := svc.GenerateAndSaveTrip(ctx, CreateTripParams{
+		Destination:  "Paris",
+		DurationDays: 2,
+	}, nil)
+	if err != nil {
+		t.Fatalf("nil generator: %v", err)
+	}
+	if created.Destination != "Paris" {
+		t.Errorf("expected Paris")
+	}
+	if len(created.Itineraries) != 0 {
+		t.Errorf("nil generator should produce no itineraries")
+	}
+}

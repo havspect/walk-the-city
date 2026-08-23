@@ -2,7 +2,6 @@ package trip
 
 import (
 	"strings"
-	"time"
 
 	"gorm.io/gorm"
 )
@@ -59,35 +58,31 @@ var ValidImageSources = map[string]bool{
 
 // Trip is the base entity. It owns many alternative Itineraries (R1).
 type Trip struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	Destination  string    `gorm:"size:255;not null" json:"destination"`
-	City         string    `gorm:"size:255" json:"city"`
-	Country      string    `gorm:"size:255" json:"country"`
-	Lat          float64   `json:"lat"`
-	Lon          float64   `json:"lon"`
-	Month        string    `gorm:"size:50" json:"month"`
-	DurationDays int       `gorm:"not null;default:1" json:"duration_days"`
-	Pace         string    `gorm:"size:50" json:"pace"`
-	Interests    string    `gorm:"type:text" json:"interests"`
-	Mobility     string    `gorm:"size:100" json:"mobility"`
-	Notes        string    `gorm:"type:text" json:"notes"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	gorm.Model
+	Destination  string `gorm:"size:255;not null" json:"destination"`
+	City         string `gorm:"size:255" json:"city"`
+	Country      string `gorm:"size:255" json:"country"`
+	Lat          float64 `json:"lat"`
+	Lon          float64 `json:"lon"`
+	Month        string `gorm:"size:50" json:"month"`
+	DurationDays int    `gorm:"not null;default:1" json:"duration_days"`
+	Pace         string `gorm:"size:50" json:"pace"`
+	Interests    string `gorm:"type:text" json:"interests"`
+	Mobility     string `gorm:"size:100" json:"mobility"`
+	Notes        string `gorm:"type:text" json:"notes"`
 
 	Itineraries []Itinerary `gorm:"foreignKey:TripID;constraint:OnDelete:CASCADE" json:"itineraries"`
 }
 
 // Itinerary is a themed / alternative plan for a Trip (R2). Not tied to a calendar day.
 type Itinerary struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	TripID     uint      `gorm:"not null;index;constraint:OnDelete:CASCADE" json:"trip_id"`
-	Title      string    `gorm:"size:255" json:"title"`
-	Theme      string    `gorm:"size:255" json:"theme"`
-	Summary    string    `gorm:"type:text" json:"summary"`
-	BestSeason string    `gorm:"type:text" json:"best_season"`
-	Position   int       `gorm:"not null;default:0" json:"position"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	gorm.Model
+	TripID     uint   `gorm:"not null;index;constraint:OnDelete:CASCADE" json:"trip_id"`
+	Title      string `gorm:"size:255" json:"title"`
+	Theme      string `gorm:"size:255" json:"theme"`
+	Summary    string `gorm:"type:text" json:"summary"`
+	BestSeason string `gorm:"type:text" json:"best_season"`
+	Position   int    `gorm:"not null;default:0" json:"position"`
 
 	Stops    []Stop    `gorm:"foreignKey:ItineraryID;constraint:OnDelete:CASCADE" json:"stops"`
 	Segments []Segment `gorm:"foreignKey:ItineraryID;constraint:OnDelete:CASCADE" json:"segments"`
@@ -95,7 +90,7 @@ type Itinerary struct {
 
 // Stop is a uniform highlight card within an Itinerary (R4-R8). Every Stop has image+text (R6).
 type Stop struct {
-	ID                 uint    `gorm:"primaryKey" json:"id"`
+	gorm.Model
 	ItineraryID        uint    `gorm:"not null;index;constraint:OnDelete:CASCADE" json:"itinerary_id"`
 	Position           int     `gorm:"not null" json:"position"`
 	Kind               string  `gorm:"size:50;not null" json:"kind"`
@@ -147,9 +142,50 @@ func (s *Stop) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// Trip soft-delete cascades to itineraries (and their stops/segments) to preserve
+// the hard-delete cascade semantics expected before gorm.Model was introduced.
+func (t *Trip) AfterDelete(tx *gorm.DB) error {
+	if t.ID == 0 {
+		return nil
+	}
+	// Use the same delete mode (soft vs hard) as the parent delete.
+	// Load itineraries in the current scope so soft-deleted parents still find children.
+	var itineraries []Itinerary
+	if err := tx.Where("trip_id = ?", t.ID).Find(&itineraries).Error; err != nil {
+		return err
+	}
+	// Fallback to Unscoped when the parent was hard-deleted and children are already excluded
+	// by foreign-key cascade or previous soft deletes.
+	if len(itineraries) == 0 {
+		if err := tx.Unscoped().Where("trip_id = ?", t.ID).Find(&itineraries).Error; err != nil {
+			return err
+		}
+	}
+	for i := range itineraries {
+		if err := tx.Delete(&itineraries[i]).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Itinerary soft-delete cascades to stops and segments.
+func (it *Itinerary) AfterDelete(tx *gorm.DB) error {
+	if it.ID == 0 {
+		return nil
+	}
+	if err := tx.Where("itinerary_id = ?", it.ID).Delete(&Stop{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("itinerary_id = ?", it.ID).Delete(&Segment{}).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
 // Segment connects two consecutive Stops within one Itinerary (R11-R13).
 type Segment struct {
-	ID              uint   `gorm:"primaryKey" json:"id"`
+	gorm.Model
 	ItineraryID     uint   `gorm:"not null;index;constraint:OnDelete:CASCADE" json:"itinerary_id"`
 	FromStopID      uint   `gorm:"not null;index" json:"from_stop_id"`
 	ToStopID        uint   `gorm:"not null;index" json:"to_stop_id"`

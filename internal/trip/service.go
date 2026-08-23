@@ -26,7 +26,6 @@ func (v *ValidationError) Error() string {
 		keys = append(keys, field)
 	}
 	sort.Strings(keys)
-
 	var msgs []string
 	for _, field := range keys {
 		msgs = append(msgs, fmt.Sprintf("%s: %s", field, v.FieldErrors[field]))
@@ -53,23 +52,19 @@ type CreateTripParams struct {
 // Validate verifies that the trip input parameters satisfy business constraints.
 func (p CreateTripParams) Validate() *ValidationError {
 	errs := make(map[string]string)
-
 	dest := strings.TrimSpace(p.Destination)
 	if dest == "" {
 		errs["destination"] = "Destination is required"
 	} else if len(dest) > 255 {
 		errs["destination"] = "Destination cannot exceed 255 characters"
 	}
-
 	if p.DurationDays < 1 || p.DurationDays > 30 {
 		errs["duration_days"] = "Duration must be between 1 and 30 days"
 	}
-
 	notes := strings.TrimSpace(p.Notes)
 	if len(notes) > 2000 {
 		errs["notes"] = "Notes cannot exceed 2000 characters"
 	}
-
 	if len(errs) > 0 {
 		return &ValidationError{FieldErrors: errs}
 	}
@@ -85,12 +80,22 @@ type TripService interface {
 }
 
 type service struct {
-	db *gorm.DB
+	db              *gorm.DB
+	tripRepo        *TripRepository
+	itineraryRepo   *ItineraryRepository
+	stopRepo        *StopRepository
+	segmentRepo     *SegmentRepository
 }
 
-// NewService constructs a default TripService backed by GORM.
+// NewService constructs a TripService backed by the slim repositories.
 func NewService(db *gorm.DB) TripService {
-	return &service{db: db}
+	return &service{
+		db:              db,
+		tripRepo:        NewTripRepository(db),
+		itineraryRepo:   NewItineraryRepository(db),
+		stopRepo:        NewStopRepository(db),
+		segmentRepo:     NewSegmentRepository(db),
+	}
 }
 
 func validateItineraries(itins []*Itinerary) *ValidationError {
@@ -100,10 +105,6 @@ func validateItineraries(itins []*Itinerary) *ValidationError {
 			continue
 		}
 		prefix := fmt.Sprintf("itineraries[%d]", i)
-		if itin.Title == "" && len(itin.Stops) > 0 {
-			// Title is expected for stacked sections; advisory but not hard fail (generator always sets it)
-		}
-		// Validate stops
 		for j, st := range itin.Stops {
 			if !ValidStopKinds[st.Kind] {
 				errs[fmt.Sprintf("%s.stops[%d].kind", prefix, j)] = fmt.Sprintf("invalid stop kind %q", st.Kind)
@@ -118,7 +119,6 @@ func validateItineraries(itins []*Itinerary) *ValidationError {
 				errs[fmt.Sprintf("%s.stops[%d].image_source", prefix, j)] = fmt.Sprintf("invalid image_source %q", st.ImageSource)
 			}
 		}
-		// N-1 invariant (R12): N stops => N-1 segments; 0/1 stop => 0 segments
 		wantSegs := 0
 		if len(itin.Stops) >= 2 {
 			wantSegs = len(itin.Stops) - 1
@@ -145,21 +145,18 @@ func validateItineraries(itins []*Itinerary) *ValidationError {
 }
 
 func (s *service) CreateTrip(ctx context.Context, params CreateTripParams) (*Trip, error) {
-	if validationErr := params.Validate(); validationErr != nil {
-		return nil, validationErr
+	if v := params.Validate(); v != nil {
+		return nil, v
 	}
 	if v := validateItineraries(params.Itineraries); v != nil {
 		return nil, v
 	}
-
 	cityName := strings.TrimSpace(params.City)
 	if cityName == "" {
 		parts := strings.Split(params.Destination, ",")
 		cityName = strings.TrimSpace(parts[0])
 	}
-
 	interestsStr := strings.Join(params.Interests, ", ")
-
 	t := &Trip{
 		Destination:  strings.TrimSpace(params.Destination),
 		City:         cityName,
@@ -173,69 +170,47 @@ func (s *service) CreateTrip(ctx context.Context, params CreateTripParams) (*Tri
 		Mobility:     strings.TrimSpace(params.Mobility),
 		Notes:        strings.TrimSpace(params.Notes),
 	}
-
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(t).Error; err != nil {
+		if err := s.tripRepo.WithTx(tx).Create(ctx, t); err != nil {
 			return fmt.Errorf("failed to create trip: %w", err)
 		}
-
 		for idx, itin := range params.Itineraries {
 			if itin == nil {
 				continue
 			}
 			itin.TripID = t.ID
 			itin.Position = idx
-			// Ensure segments/stops will be created with correct FK; we need to hold them before Create
 			stops := itin.Stops
 			segments := itin.Segments
 			itin.Stops = nil
 			itin.Segments = nil
-
-			if err := tx.Create(itin).Error; err != nil {
+			if err := s.itineraryRepo.WithTx(tx).Create(ctx, itin); err != nil {
 				return fmt.Errorf("failed to create itinerary: %w", err)
 			}
-
-			// Create stops and remember IDs by position
 			savedStops := make([]Stop, 0, len(stops))
 			for pos, st := range stops {
 				st.ItineraryID = itin.ID
 				st.Position = pos
-				// Ensure image URL never empty (R19)
-				if strings.TrimSpace(st.ImageURL) == "" {
-					st.ImageURL = placeholderImageURL(st.Title)
-				}
-				if err := tx.Create(&st).Error; err != nil {
+				if err := s.stopRepo.WithTx(tx).Create(ctx, &st); err != nil {
 					return fmt.Errorf("failed to create stop: %w", err)
 				}
 				savedStops = append(savedStops, st)
 			}
-
-			// Create segments; recompute From/To from saved stop IDs by position (N-1 invariant R12)
 			for pos, seg := range segments {
 				seg.ItineraryID = itin.ID
 				seg.Position = pos
-				if len(savedStops) > 0 {
-					if pos < len(savedStops)-1 {
-						seg.FromStopID = savedStops[pos].ID
-						seg.ToStopID = savedStops[pos+1].ID
-					} else if pos < len(savedStops) {
-						// Defensive: if generator provided extra segments, clamp
-						seg.FromStopID = savedStops[pos].ID
-						if pos+1 < len(savedStops) {
-							seg.ToStopID = savedStops[pos+1].ID
-						}
-					}
-				}
-				if err := tx.Create(&seg).Error; err != nil {
+				// Pair segment i to savedStops[i] -> savedStops[i+1] by slice index.
+				// N-1 validation guarantees pos+1 is in range.
+				seg.FromStopID = savedStops[pos].ID
+				seg.ToStopID = savedStops[pos+1].ID
+				if err := s.segmentRepo.WithTx(tx).Create(ctx, &seg); err != nil {
 					return fmt.Errorf("failed to create segment: %w", err)
 				}
 			}
-
-			// Restore for return value (with IDs)
 			itin.Stops = savedStops
-			// Reload segments with IDs for completeness
-			var savedSegs []Segment
-			if err := tx.Where("itinerary_id = ?", itin.ID).Order("position ASC").Find(&savedSegs).Error; err == nil {
+			savedSegs, err := s.segmentRepo.WithTx(tx).ListByParent(ctx, itin.ID)
+			if err == nil {
+				// Convert []Segment to []Segment (already correct) — ensure ordered
 				itin.Segments = savedSegs
 			} else {
 				itin.Segments = segments
@@ -246,74 +221,21 @@ func (s *service) CreateTrip(ctx context.Context, params CreateTripParams) (*Tri
 	if err != nil {
 		return nil, err
 	}
-
-	// Reload with preloads for return value consistency
-	return s.GetTripByID(ctx, t.ID)
-}
-
-func placeholderImageURL(title string) string {
-	// Deterministic placeholder; real BFL Flux will upgrade in place (R17-R19)
-	return "https://picsum.photos/seed/" + urlSafeSeed(title) + "/600/400"
-}
-
-func urlSafeSeed(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		s = "walk-the-city"
-	}
-	s = strings.ToLower(s)
-	s = strings.ReplaceAll(s, " ", "-")
-	// Keep alphanumeric and dash
-	var b strings.Builder
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
-			b.WriteRune(r)
-		}
-	}
-	out := b.String()
-	if out == "" {
-		return "walk-the-city"
-	}
-	if len(out) > 40 {
-		out = out[:40]
-	}
-	return out
+	return s.tripRepo.GetTripByID(ctx, t.ID)
 }
 
 func (s *service) ListTrips(ctx context.Context) ([]Trip, error) {
-	var trips []Trip
-	err := s.db.WithContext(ctx).
-		Preload("Itineraries", func(db *gorm.DB) *gorm.DB { return db.Order("position ASC") }).
-		Preload("Itineraries.Stops", func(db *gorm.DB) *gorm.DB { return db.Order("position ASC") }).
-		Preload("Itineraries.Segments", func(db *gorm.DB) *gorm.DB { return db.Order("position ASC") }).
-		Order("created_at DESC").Find(&trips).Error
-	if err != nil {
-		return nil, fmt.Errorf("failed to list trips: %w", err)
-	}
-	return trips, nil
+	return s.tripRepo.ListTrips(ctx)
 }
 
 func (s *service) GetTripByID(ctx context.Context, id uint) (*Trip, error) {
-	var t Trip
-	err := s.db.WithContext(ctx).
-		Preload("Itineraries", func(db *gorm.DB) *gorm.DB { return db.Order("position ASC") }).
-		Preload("Itineraries.Stops", func(db *gorm.DB) *gorm.DB { return db.Order("position ASC") }).
-		Preload("Itineraries.Segments", func(db *gorm.DB) *gorm.DB { return db.Order("position ASC") }).
-		First(&t, id).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("failed to get trip %d: %w", id, err)
-	}
-	return &t, nil
+	return s.tripRepo.GetTripByID(ctx, id)
 }
 
 func (s *service) GenerateAndSaveTrip(ctx context.Context, params CreateTripParams, gen TripGenerator) (*Trip, error) {
-	if validationErr := params.Validate(); validationErr != nil {
-		return nil, validationErr
+	if v := params.Validate(); v != nil {
+		return nil, v
 	}
-
 	if gen != nil {
 		itins, err := gen.Generate(ctx, params)
 		if err != nil {
@@ -321,6 +243,5 @@ func (s *service) GenerateAndSaveTrip(ctx context.Context, params CreateTripPara
 		}
 		params.Itineraries = itins
 	}
-
 	return s.CreateTrip(ctx, params)
 }

@@ -42,7 +42,7 @@ type tripDetailData struct {
 }
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
-	trips, err := app.tripService.ListTrips(r.Context())
+	trips, err := app.tripRepo.ListTrips(r.Context())
 	if err != nil {
 		app.logger.Error("failed to list trips", "error", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -189,7 +189,7 @@ func (app *application) generateTrip(w http.ResponseWriter, r *http.Request) {
 		Notes:        notes,
 	}
 
-	createdTrip, err := app.tripService.GenerateAndSaveTrip(r.Context(), params, app.tripGenerator)
+	createdTrip, err := app.tripRepo.GenerateAndSaveTrip(r.Context(), params, app.tripGenerator)
 	if err != nil {
 		app.logger.Error("failed to generate and save trip", "error", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -215,7 +215,7 @@ func (app *application) showTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, err := app.tripService.GetTripByID(r.Context(), uint(idVal))
+	t, err := app.tripRepo.GetTripByID(r.Context(), uint(idVal))
 	if err != nil {
 		if errors.Is(err, trip.ErrNotFound) {
 			http.NotFound(w, r)
@@ -252,7 +252,7 @@ func (app *application) createTrip(w http.ResponseWriter, r *http.Request) {
 		Notes:        r.PostFormValue("notes"),
 	}
 
-	created, err := app.tripService.CreateTrip(r.Context(), params)
+	created, err := app.tripRepo.CreateTrip(r.Context(), params)
 	if err != nil {
 		var valErr *trip.ValidationError
 		if errors.As(err, &valErr) {
@@ -278,7 +278,7 @@ func (app *application) createTrip(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Non-HTMX validation error fallback
-			trips, listErr := app.tripService.ListTrips(r.Context())
+			trips, listErr := app.tripRepo.ListTrips(r.Context())
 			if listErr != nil {
 				app.logger.Error("failed to list trips for error page", "error", listErr)
 			}

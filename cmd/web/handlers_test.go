@@ -54,7 +54,7 @@ func newTestApplication(t *testing.T) *application {
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		config: &config.Config{Port: "8080", DBPath: ":memory:", LogLevel: "debug", Env: "test"},
 		html: renderer, staticFS: assets.StaticFiles,
-		tripService: trip.NewService(db), nominatimClient: nomClient, tripGenerator: trip.NewMockGenerator(),
+		tripRepo: trip.NewService(db), nominatimClient: nomClient, tripGenerator: trip.NewMockGenerator(),
 	}
 	return app
 }
